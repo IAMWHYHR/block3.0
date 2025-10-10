@@ -1,0 +1,152 @@
+[
+  {
+    "id": "4b9d9eea-c850-43ae-852e-8a8757938348",
+    "name": "默认金字塔",
+    "levels": 3,
+    "levelData": [
+      {
+        "text": "顶层",
+        "color": "#ff6b6b"
+      },
+      {
+        "text": "中层",
+        "color": "#4ecdc4"
+      },
+      {
+        "text": "底层",
+        "color": "#45b7d1"
+      }
+    ],
+    "createdAt": "2025-10-10T05:47:21.007Z",
+    "updatedAt": "2025-10-10T05:47:21.007Z"
+  },
+  {
+    "id": "00a40927-37db-43d5-b63f-d1889cd702a5",
+    "name": "组织架构",
+    "levels": 4,
+    "levelData": [
+      {
+        "text": "CEO",
+        "color": "#8e44ad"
+      },
+      {
+        "text": "部门经理",
+        "color": "#3498db"
+      },
+      {
+        "text": "团队负责人",
+        "color": "#2ecc71"
+      },
+      {
+        "text": "普通员工",
+        "color": "#f39c12"
+      }
+    ],
+    "createdAt": "2025-10-10T05:47:21.008Z",
+    "updatedAt": "2025-10-10T05:47:21.008Z"
+  },
+  {
+    "id": "53c36cac-f576-4655-ac4a-667f99943e8d",
+    "name": "产品层次",
+    "levels": 5,
+    "levelData": [
+      {
+        "text": "核心功能",
+        "color": "#e74c3c"
+      },
+      {
+        "text": "主要功能",
+        "color": "#e67e22"
+      },
+      {
+        "text": "辅助功能",
+        "color": "#f1c40f"
+      },
+      {
+        "text": "扩展功能",
+        "color": "#2ecc71"
+      },
+      {
+        "text": "未来功能",
+        "color": "#3498db"
+      }
+    ],
+    "createdAt": "2025-10-10T05:47:21.008Z",
+    "updatedAt": "2025-10-10T05:47:21.008Z"
+  },
+  {
+    "id": "b34a7678-ca11-472c-8c1e-30b60627a9bc",
+    "name": "默认金字塔",
+    "levels": 3,
+    "levelData": [
+      {
+        "text": "顶层",
+        "color": "#ff6b6b"
+      },
+      {
+        "text": "中层",
+        "color": "#4ecdc4"
+      },
+      {
+        "text": "底层",
+        "color": "#45b7d1"
+      }
+    ],
+    "createdAt": "2025-10-10T05:47:58.813Z",
+    "updatedAt": "2025-10-10T05:47:58.813Z"
+  },
+  {
+    "id": "e0aa7fae-71db-407a-83c7-7a1a47da43fc",
+    "name": "组织架构",
+    "levels": 4,
+    "levelData": [
+      {
+        "text": "CEO",
+        "color": "#8e44ad"
+      },
+      {
+        "text": "部门经理",
+        "color": "#3498db"
+      },
+      {
+        "text": "团队负责人",
+        "color": "#2ecc71"
+      },
+      {
+        "text": "普通员工",
+        "color": "#f39c12"
+      }
+    ],
+    "createdAt": "2025-10-10T05:47:58.814Z",
+    "updatedAt": "2025-10-10T05:47:58.814Z"
+  },
+  {
+    "id": "3909f998-47ab-4247-b800-d3f53ca775cd",
+    "name": "产品层次",
+    "levels": 5,
+    "levelData": [
+      {
+        "text": "核心功能",
+        "color": "#e74c3c"
+      },
+      {
+        "text": "主要功能",
+        "color": "#e67e22"
+      },
+      {
+        "text": "辅助功能",
+        "color": "#f1c40f"
+      },
+      {
+        "text": "扩展功能",
+        "color": "#2ecc71"
+      },
+      {
+        "text": "未来功能",
+        "color": "#3498db"
+      }
+    ],
+    "createdAt": "2025-10-10T05:47:58.814Z",
+    "updatedAt": "2025-10-10T05:47:58.814Z"
+  }
+]

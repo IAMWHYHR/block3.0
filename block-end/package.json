@@ -1,0 +1,23 @@
+{
+  "name": "block-end",
+  "version": "1.0.0",
+  "description": "Block 后端服务 - 金字塔数据管理",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js",
+    "init-db": "node src/scripts/initDatabase.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "body-parser": "^1.20.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": ["block", "pyramid", "api", "micro-frontend"],
+  "author": "Block Team",
+  "license": "MIT"
+}
