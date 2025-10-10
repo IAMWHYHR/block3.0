@@ -1,0 +1,28 @@
+{
+  "name": "shared-sdk",
+  "version": "0.1.0",
+  "description": "Shared SDK for main app and micro apps communication (toolbar API, events)",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "module": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "require": "./index.js",
+      "types": "./index.d.ts"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "keywords": ["qiankun", "micro-frontend", "sdk", "toolbar" ]
+}
+
+
+
+
+
