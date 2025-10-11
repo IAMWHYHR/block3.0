@@ -90,17 +90,8 @@ function render(props = {}) {
 
         // 工具栏定制示例
         const createIcon2 = () => {
-          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          svg.setAttribute('width', '16');
-          svg.setAttribute('height', '16');
-          svg.setAttribute('viewBox', '0 0 16 16');
-          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          circle.setAttribute('cx', '8');
-          circle.setAttribute('cy', '8');
-          circle.setAttribute('r', '6');
-          circle.setAttribute('fill', 'currentColor');
-          svg.appendChild(circle);
-          return svg;
+          // 返回简单的字符串图标，避免 SVG 渲染问题
+          return '✏️';
         };
 
         // 在指定位置插入工具栏菜单项

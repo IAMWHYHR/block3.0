@@ -7,9 +7,9 @@
     "build": "cross-env NODE_ENV=production webpack --config webpack.config.js"
   },
   "dependencies": {
-    "shared-sdk": "file:../SharedSDK",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "shared-sdk": "file:../SharedSDK"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -23,14 +23,3 @@
     "webpack-dev-server": "^5.0.4"
   }
 }
-
-
-
-
-
-
-
-
-
-
-

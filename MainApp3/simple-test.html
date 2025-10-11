@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MainApp3 简单测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .editor-test {
+            border: 2px solid #007bff;
+            min-height: 300px;
+            padding: 10px;
+            margin: 20px 0;
+            background: #f8f9fa;
+        }
+        .test-button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>MainApp3 编辑器测试</h1>
+        
+        <div class="status">
+            <strong>测试说明：</strong>这个页面将测试 MainApp3 编辑器的基本功能，包括创建编辑器和插入微应用。
+        </div>
+
+        <div>
+            <button class="test-button" onclick="testCreateEditor()">创建编辑器</button>
+            <button class="test-button" onclick="testInsertMicroApp()">插入微应用</button>
+            <button class="test-button" onclick="getEditorContent()">获取内容</button>
+            <button class="test-button" onclick="clearEditor()">清空编辑器</button>
+        </div>
+
+        <div id="editor-container" class="editor-test">
+            <p>编辑器将在这里显示...</p>
+        </div>
+
+        <div id="content-display" style="margin-top: 20px; padding: 10px; background: #e9ecef; border-radius: 4px;">
+            <h3>编辑器内容：</h3>
+            <pre id="content-text">暂无内容</pre>
+        </div>
+    </div>
+
+    <script>
+        let currentEditor = null;
+
+        function testCreateEditor() {
+            try {
+                const container = document.getElementById('editor-container');
+                container.innerHTML = '';
+                
+                if (currentEditor) {
+                    currentEditor.destroy();
+                }
+
+                currentEditor = window.createEditor(container);
+                document.getElementById('content-text').textContent = '编辑器创建成功！';
+                console.log('编辑器创建成功');
+            } catch (error) {
+                document.getElementById('content-text').textContent = '创建编辑器失败: ' + error.message;
+                console.error('创建编辑器失败:', error);
+            }
+        }
+
+        function testInsertMicroApp() {
+            try {
+                if (!currentEditor) {
+                    document.getElementById('content-text').textContent = '请先创建编辑器';
+                    return;
+                }
+
+                // 这里需要实现插入微应用的逻辑
+                document.getElementById('content-text').textContent = '微应用插入功能需要进一步实现';
+                console.log('微应用插入测试');
+            } catch (error) {
+                document.getElementById('content-text').textContent = '插入微应用失败: ' + error.message;
+                console.error('插入微应用失败:', error);
+            }
+        }
+
+        function getEditorContent() {
+            try {
+                if (!currentEditor) {
+                    document.getElementById('content-text').textContent = '请先创建编辑器';
+                    return;
+                }
+
+                const content = currentEditor.getContent();
+                document.getElementById('content-text').textContent = content || '编辑器内容为空';
+                console.log('编辑器内容:', content);
+            } catch (error) {
+                document.getElementById('content-text').textContent = '获取内容失败: ' + error.message;
+                console.error('获取内容失败:', error);
+            }
+        }
+
+        function clearEditor() {
+            try {
+                if (!currentEditor) {
+                    document.getElementById('content-text').textContent = '请先创建编辑器';
+                    return;
+                }
+
+                currentEditor.setContent('');
+                document.getElementById('content-text').textContent = '编辑器已清空';
+                console.log('编辑器已清空');
+            } catch (error) {
+                document.getElementById('content-text').textContent = '清空编辑器失败: ' + error.message;
+                console.error('清空编辑器失败:', error);
+            }
+        }
+
+        // 页面加载完成后自动测试
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (typeof window.createEditor === 'function') {
+                    document.getElementById('content-text').textContent = 'MainApp3 已加载，可以开始测试';
+                } else {
+                    document.getElementById('content-text').textContent = 'MainApp3 未正确加载';
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

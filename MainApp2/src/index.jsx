@@ -573,7 +573,7 @@ const MountControls = () => {
                   gap: '5px'
                 }}
               >
-                {typeof item.icon === 'function' ? item.icon() : item.icon}
+                <span style={{ fontSize: '14px' }}>🔧</span>
                 <span>{item.code}</span>
               </button>
             );

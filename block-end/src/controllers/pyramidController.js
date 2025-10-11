@@ -162,3 +162,4 @@ class PyramidController {
 }
 
 module.exports = new PyramidController();
+

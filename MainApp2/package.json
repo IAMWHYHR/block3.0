@@ -9,7 +9,8 @@
   "dependencies": {
     "qiankun": "^2.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "shared-sdk": "file:../SharedSDK"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
@@ -23,8 +24,3 @@
     "webpack-dev-server": "^5.0.4"
   }
 }
-
-
-
-
-

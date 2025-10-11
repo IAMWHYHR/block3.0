@@ -10,3 +10,4 @@ router.put('/:id', pyramidController.updatePyramid);
 router.delete('/:id', pyramidController.deletePyramid);
 
 module.exports = router;
+

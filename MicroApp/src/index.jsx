@@ -101,15 +101,8 @@ function render(props = {}) {
 
         // 工具栏定制示例
         const createIcon = () => {
-          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          svg.setAttribute('width', '16');
-          svg.setAttribute('height', '16');
-          svg.setAttribute('viewBox', '0 0 16 16');
-          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          path.setAttribute('d', 'M8 0L10.5 5.5L16 8L10.5 10.5L8 16L5.5 10.5L0 8L5.5 5.5L8 0Z');
-          path.setAttribute('fill', 'currentColor');
-          svg.appendChild(path);
-          return svg;
+          // 返回简单的字符串图标，避免 SVG 渲染问题
+          return '💾';
         };
 
         // 添加工具栏菜单项
