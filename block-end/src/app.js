@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 
 // 中间件
 app.use(cors({
-  origin: ['http://localhost:7100', 'http://localhost:7200', 'http://localhost:7300'],
+  origin: ['http://localhost:7100', 'http://localhost:7200', 'http://localhost:7300', 'http://localhost:7500'],
   credentials: true
 }));
 app.use(bodyParser.json());
@@ -67,4 +67,5 @@ app.listen(PORT, () => {
 });
 
 module.exports = app;
+
 

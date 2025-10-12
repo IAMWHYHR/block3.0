@@ -1,6 +1,54 @@
 import React, { useState, useEffect } from 'react';
 
-const Pyramid = () => {
+const Pyramid = (props) => {
+  // 从 props 中获取协同相关的方法和数据
+  const {
+    pyramidProvider,
+    pyramidSharedData,
+    pyramidList,
+    pyramidData,
+    pyramidListData,
+    pyramidOnlineUsers,
+    pyramidCollaborationStatus,
+    updatePyramidData,
+    getPyramidData,
+    addPyramidToList,
+    updatePyramidInList,
+    removePyramidFromList,
+    setPyramidUser,
+    isCollaborationEnabled: propsCollaborationEnabled,
+    debugInfo
+  } = props || {};
+
+  // 检查是否启用了协同功能
+  const isCollaborationEnabled = !!pyramidProvider && !!pyramidSharedData;
+
+  // 调试信息
+  console.log('🔍 金字塔组件协同状态详细调试:', {
+    isCollaborationEnabled,
+    pyramidProvider: !!pyramidProvider,
+    pyramidSharedData: !!pyramidSharedData,
+    pyramidProviderType: typeof pyramidProvider,
+    pyramidSharedDataType: typeof pyramidSharedData,
+    pyramidCollaborationStatus,
+    debugInfo,
+    propsKeys: Object.keys(props || {}),
+    hasUpdatePyramidData: typeof updatePyramidData,
+    hasGetPyramidData: typeof getPyramidData
+  });
+
+
+  // 本地状态（当协同功能不可用时使用）
+  const [localLevels, setLocalLevels] = useState(3);
+  const [localLevelData, setLocalLevelData] = useState([
+    { text: '顶层', color: '#ff6b6b' },
+    { text: '中层', color: '#4ecdc4' },
+    { text: '底层', color: '#45b7d1' }
+  ]);
+  const [localPyramids, setLocalPyramids] = useState([]);
+  const [localSelectedPyramidId, setLocalSelectedPyramidId] = useState('');
+
+  // 协同状态
   const [levels, setLevels] = useState(3);
   const [levelData, setLevelData] = useState([
     { text: '顶层', color: '#ff6b6b' },
@@ -14,6 +62,136 @@ const Pyramid = () => {
 
   // API 基础URL
   const API_BASE_URL = 'http://localhost:3000/api';
+
+  // 协同数据同步
+  useEffect(() => {
+    if (isCollaborationEnabled) {
+      // 从协同数据中获取当前状态
+      const currentLevels = getPyramidData('levels') || 3;
+      const currentLevelData = getPyramidData('levelData') || [
+        { text: '顶层', color: '#ff6b6b' },
+        { text: '中层', color: '#4ecdc4' },
+        { text: '底层', color: '#45b7d1' }
+      ];
+      const currentSelectedId = getPyramidData('selectedPyramidId') || '';
+
+      setLevels(currentLevels);
+      setLevelData(currentLevelData);
+      setSelectedPyramidId(currentSelectedId);
+      setPyramids(pyramidListData || []);
+
+      console.log('金字塔协同数据已同步:', {
+        levels: currentLevels,
+        levelData: currentLevelData,
+        selectedId: currentSelectedId,
+        pyramids: pyramidListData
+      });
+    } else {
+      // 使用本地状态
+      setLevels(localLevels);
+      setLevelData(localLevelData);
+      setSelectedPyramidId(localSelectedPyramidId);
+      setPyramids(localPyramids);
+    }
+  }, [isCollaborationEnabled, pyramidData, pyramidListData, localLevels, localLevelData, localSelectedPyramidId, localPyramids]);
+
+  // 监听协同数据变化
+  useEffect(() => {
+    if (isCollaborationEnabled && pyramidSharedData) {
+      const handleDataChange = () => {
+        const currentLevels = getPyramidData('levels');
+        const currentLevelData = getPyramidData('levelData');
+        const currentSelectedId = getPyramidData('selectedPyramidId');
+
+        if (currentLevels !== undefined) {
+          setLevels(currentLevels);
+          console.log('协同数据变化 - 层数更新:', currentLevels);
+        }
+        if (currentLevelData !== undefined) {
+          setLevelData(currentLevelData);
+          console.log('协同数据变化 - 层数据更新:', currentLevelData);
+        }
+        if (currentSelectedId !== undefined) {
+          setSelectedPyramidId(currentSelectedId);
+          console.log('协同数据变化 - 选中ID更新:', currentSelectedId);
+        }
+      };
+
+      // 监听协同数据变化
+      pyramidSharedData.observe(handleDataChange);
+
+      return () => {
+        pyramidSharedData.unobserve(handleDataChange);
+      };
+    }
+  }, [isCollaborationEnabled, pyramidSharedData, getPyramidData]);
+
+  // 更新层数的协同方法
+  const updateLevels = (newLevels) => {
+    console.log('updateLevels 被调用:', { newLevels, isCollaborationEnabled });
+    if (isCollaborationEnabled && updatePyramidData) {
+      updatePyramidData('levels', newLevels);
+      console.log('✅ 协同更新层数:', newLevels);
+    } else {
+      setLocalLevels(newLevels);
+      console.log('❌ 使用本地状态更新层数:', newLevels);
+    }
+  };
+
+  // 更新层数据的协同方法
+  const updateLevelData = (newLevelData) => {
+    console.log('updateLevelData 被调用:', { newLevelData, isCollaborationEnabled });
+    if (isCollaborationEnabled && updatePyramidData) {
+      updatePyramidData('levelData', newLevelData);
+      console.log('✅ 协同更新层数据:', newLevelData);
+    } else {
+      setLocalLevelData(newLevelData);
+      console.log('❌ 使用本地状态更新层数据:', newLevelData);
+    }
+  };
+
+  // 更新选中金字塔ID的协同方法
+  const updateSelectedPyramidId = (newId) => {
+    console.log('updateSelectedPyramidId 被调用:', { newId, isCollaborationEnabled });
+    if (isCollaborationEnabled && updatePyramidData) {
+      updatePyramidData('selectedPyramidId', newId);
+      console.log('✅ 协同更新选中金字塔ID:', newId);
+    } else {
+      setLocalSelectedPyramidId(newId);
+      console.log('❌ 使用本地状态更新选中金字塔ID:', newId);
+    }
+  };
+
+  // 将调试函数暴露到全局，方便在控制台中测试
+  useEffect(() => {
+    if (isCollaborationEnabled) {
+      window.pyramidDebug = {
+        updateLevels: (levels) => {
+          console.log('手动更新层数:', levels);
+          updateLevels(levels);
+        },
+        updateLevelData: (data) => {
+          console.log('手动更新层数据:', data);
+          updateLevelData(data);
+        },
+        getCurrentData: () => {
+          console.log('当前协同数据:', {
+            levels: getPyramidData('levels'),
+            levelData: getPyramidData('levelData'),
+            selectedId: getPyramidData('selectedPyramidId')
+          });
+        },
+        testCollaboration: () => {
+          console.log('测试协同功能...');
+          updatePyramidData('test', 'Hello from debug!');
+          setTimeout(() => {
+            console.log('测试数据:', getPyramidData('test'));
+          }, 1000);
+        }
+      };
+      console.log('🔧 调试工具已加载，使用 window.pyramidDebug 进行测试');
+    }
+  }, [isCollaborationEnabled, updateLevels, updateLevelData, updatePyramidData, getPyramidData]);
 
   // 获取所有金字塔列表
   const fetchPyramids = async () => {
@@ -47,8 +225,8 @@ const Pyramid = () => {
       
       if (result.success) {
         const pyramid = result.data;
-        setLevels(pyramid.levels);
-        setLevelData(pyramid.levelData);
+        updateLevels(pyramid.levels);
+        updateLevelData(pyramid.levelData);
         console.log('获取金字塔数据成功:', pyramid);
       } else {
         setError('获取金字塔数据失败: ' + result.message);
@@ -110,28 +288,30 @@ const Pyramid = () => {
         text: `层级 ${levels + 1}`,
         color: `hsl(${Math.random() * 360}, 70%, 60%)`
       };
-      setLevelData([...levelData, newLevel]);
-      setLevels(levels + 1);
+      const newLevelData = [...levelData, newLevel];
+      updateLevelData(newLevelData);
+      updateLevels(levels + 1);
     }
   };
 
   const removeLevel = () => {
     if (levels > 2) { // 限制最小层级
-      setLevelData(levelData.slice(0, -1));
-      setLevels(levels - 1);
+      const newLevelData = levelData.slice(0, -1);
+      updateLevelData(newLevelData);
+      updateLevels(levels - 1);
     }
   };
 
   const updateLevelText = (index, newText) => {
     const updatedData = [...levelData];
     updatedData[index].text = newText;
-    setLevelData(updatedData);
+    updateLevelData(updatedData);
   };
 
   const updateLevelColor = (index, newColor) => {
     const updatedData = [...levelData];
     updatedData[index].color = newColor;
-    setLevelData(updatedData);
+    updateLevelData(updatedData);
   };
 
   const renderPyramidLevel = (level, index) => {
@@ -205,7 +385,33 @@ const Pyramid = () => {
         paddingBottom: '10px',
         borderBottom: '2px solid #e9ecef'
       }}>
-        <h3 style={{ margin: 0, color: '#495057' }}>SmartArt 金字塔</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <h3 style={{ margin: 0, color: '#495057' }}>SmartArt 金字塔</h3>
+          {isCollaborationEnabled && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '4px 8px',
+              background: '#f8f9fa',
+              borderRadius: '4px',
+              fontSize: '12px'
+            }}>
+              <div style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: pyramidCollaborationStatus === 'connected' ? '#28a745' : 
+                                pyramidCollaborationStatus === 'connecting' ? '#ffc107' : '#dc3545'
+              }} />
+              <span>协同: {pyramidCollaborationStatus === 'connected' ? '已连接' : 
+                          pyramidCollaborationStatus === 'connecting' ? '连接中' : '已断开'}</span>
+              {pyramidOnlineUsers && pyramidOnlineUsers.length > 0 && (
+                <span>({pyramidOnlineUsers.length} 用户在线)</span>
+              )}
+            </div>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
             onClick={removeLevel}
@@ -255,7 +461,7 @@ const Pyramid = () => {
           <select
             value={selectedPyramidId}
             onChange={(e) => {
-              setSelectedPyramidId(e.target.value);
+              updateSelectedPyramidId(e.target.value);
               if (e.target.value) {
                 fetchPyramidById(e.target.value);
               }

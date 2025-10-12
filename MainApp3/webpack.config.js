@@ -33,7 +33,10 @@ module.exports = {
   plugins: [
     new HtmlWebpackPlugin({
       template: path.resolve(__dirname, 'public/index.html')
-    })
+    }),
+    // new HtmlWebpackPlugin({
+    //   template: path.resolve(__dirname, 'public/test-collaboration.html')
+    // })
   ],
   devServer: {
     port: PORT,
@@ -46,3 +49,10 @@ module.exports = {
     }
   }
 };
+
+
+
+
+
+
+

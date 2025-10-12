@@ -16,6 +16,9 @@ function render(props = {}) {
   // 创建 API 代理
   const api = createAPIProxy(props);
   
+  // 调试信息：显示接收到的 props
+  console.log('🔍 MicroApp 接收到的 props:', props);
+  
   const MicroAppComponent = () => {
     const [sharedValue, setSharedValue] = React.useState('');
     
@@ -34,13 +37,24 @@ function render(props = {}) {
     // 使用 BlockContext 功能
     React.useEffect(() => {
       const blockCtx = api.blockContext;
-      if (blockCtx) {
-        // 生命周期管理
-        const unsubscribeMount = blockCtx.lifeCycleService.onMount(() => {
+      if (!blockCtx) {
+        console.warn('[MicroApp] BlockContext 不可用');
+        return;
+      }
+
+      let unsubscribeMount = () => {};
+      let unsubscribeUnmount = () => {};
+      let unsubscribeData = () => {};
+      let mapUnsubscribe = () => {};
+      let arrayUnsubscribe = () => {};
+
+      // 生命周期管理
+      if (blockCtx.lifeCycleService) {
+        unsubscribeMount = blockCtx.lifeCycleService.onMount(() => {
           console.log('[MicroApp] 生命周期: 挂载');
         });
         
-        const unsubscribeUnmount = blockCtx.lifeCycleService.onUnmount(() => {
+        unsubscribeUnmount = blockCtx.lifeCycleService.onUnmount(() => {
           console.log('[MicroApp] 生命周期: 卸载');
         });
 
@@ -48,9 +62,11 @@ function render(props = {}) {
         setTimeout(() => {
           blockCtx.lifeCycleService.notifyBlockReady();
         }, 2000); // 模拟 2 秒后 Block 加载完成
+      }
 
-        // 共享数据订阅
-        const unsubscribeData = blockCtx.sharedData.subscribe('microAppData', (value) => {
+      // 共享数据订阅
+      if (blockCtx.sharedData) {
+        unsubscribeData = blockCtx.sharedData.subscribe('microAppData', (value) => {
           setSharedValue(value);
         });
 
@@ -59,12 +75,12 @@ function render(props = {}) {
         const sharedArray = blockCtx.sharedData.getArray('taskList');
 
         // 监听Map变更
-        const mapUnsubscribe = sharedMap.subscribe((action, key, value) => {
+        mapUnsubscribe = sharedMap.subscribe((action, key, value) => {
           console.log('[MicroApp] Map变更:', action, key, value);
         });
 
         // 监听数组变更
-        const arrayUnsubscribe = sharedArray.subscribe((action, index, value) => {
+        arrayUnsubscribe = sharedArray.subscribe((action, index, value) => {
           console.log('[MicroApp] Array变更:', action, index, value);
         });
 
@@ -72,8 +88,10 @@ function render(props = {}) {
         sharedMap.set('theme', 'dark');
         sharedMap.set('language', 'zh');
         sharedArray.push('任务1', '任务2', '任务3');
+      }
 
-        // 环境服务监听
+      // 环境服务监听
+      if (blockCtx.envService) {
         const darkModeListener = (mode) => {
           console.log('[MicroApp] 深色模式变更:', mode);
           // 可以在这里更新微应用的样式
@@ -90,16 +108,20 @@ function render(props = {}) {
         blockCtx.envService.onDarkModeChange(darkModeListener);
         blockCtx.envService.onLanguageChange(languageListener);
         blockCtx.envService.onDocModeChange(docModeListener);
+      }
 
-        // 视图服务示例
+      // 视图服务示例
+      if (blockCtx.viewService) {
         blockCtx.viewService.openView('microAppView', { title: '微应用视图' });
 
         // 视图管理功能演示
         setTimeout(() => {
           blockCtx.viewService.showToast('微应用1加载完成！');
         }, 1000);
+      }
 
-        // 工具栏定制示例
+      // 工具栏定制示例
+      if (blockCtx.toolBar) {
         const createIcon = () => {
           // 返回简单的字符串图标，避免 SVG 渲染问题
           return '💾';
@@ -133,30 +155,32 @@ function render(props = {}) {
             }
           }
         ]);
+      }
 
-        return () => {
-          unsubscribeMount();
-          unsubscribeUnmount();
-          unsubscribeData();
-          mapUnsubscribe();
-          arrayUnsubscribe();
+      return () => {
+        unsubscribeMount();
+        unsubscribeUnmount();
+        unsubscribeData();
+        mapUnsubscribe();
+        arrayUnsubscribe();
+        if (blockCtx.envService) {
           blockCtx.envService.offDarkModeChange(darkModeListener);
           blockCtx.envService.offLanguageChange(languageListener);
           blockCtx.envService.offDocModeChange(docModeListener);
-        };
-      }
+        }
+      };
     }, []);
 
     const handleSetSharedData = () => {
       const blockCtx = api.blockContext;
-      if (blockCtx) {
+      if (blockCtx && blockCtx.sharedData) {
         blockCtx.sharedData.set('microAppData', `来自微应用的数据: ${Date.now()}`);
       }
     };
 
     const handleShowModal = async () => {
       const blockCtx = api.blockContext;
-      if (blockCtx) {
+      if (blockCtx && blockCtx.viewService) {
         const result = await blockCtx.viewService.openModal({
           title: '微应用1对话框',
           content: '这是一个来自微应用1的模态对话框',
@@ -169,7 +193,7 @@ function render(props = {}) {
 
     const handleOpenConfig = async () => {
       const blockCtx = api.blockContext;
-      if (blockCtx) {
+      if (blockCtx && blockCtx.viewService) {
         const result = await blockCtx.viewService.openConfig({
           title: '微应用1配置',
           width: 400,
@@ -181,7 +205,7 @@ function render(props = {}) {
 
     const handleToggleFullscreen = async () => {
       const blockCtx = api.blockContext;
-      if (blockCtx) {
+      if (blockCtx && blockCtx.viewService) {
         try {
           await blockCtx.viewService.requestFullscreen({ element: 'body' });
           setTimeout(() => {
@@ -221,7 +245,7 @@ function render(props = {}) {
         </div>
         
         <div style={{ marginTop: '30px' }}>
-          <Pyramid />
+          <Pyramid {...props} />
         </div>
       </div>
     );

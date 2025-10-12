@@ -161,5 +161,16 @@ class PyramidController {
   }
 }
 
-module.exports = new PyramidController();
+// 创建控制器实例
+const pyramidController = new PyramidController();
+
+// 导出控制器方法
+module.exports = {
+  createPyramid: pyramidController.createPyramid.bind(pyramidController),
+  getAllPyramids: pyramidController.getAllPyramids.bind(pyramidController),
+  getPyramidById: pyramidController.getPyramidById.bind(pyramidController),
+  updatePyramid: pyramidController.updatePyramid.bind(pyramidController),
+  deletePyramid: pyramidController.deletePyramid.bind(pyramidController)
+};
+
 

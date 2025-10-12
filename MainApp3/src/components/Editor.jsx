@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -7,12 +7,21 @@ import Strike from '@tiptap/extension-strike';
 import Code from '@tiptap/extension-code';
 import CodeBlock from '@tiptap/extension-code-block';
 import Link from '@tiptap/extension-link';
+import Collaboration from '@tiptap/extension-collaboration';
+import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { SkeletonNode } from '../nodes/SkeletonNode';
+import { provider, ydoc, cleanup } from '../collaboration';
 
 const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
+  const [collaborationStatus, setCollaborationStatus] = useState('connecting');
+  const [connectedUsers, setConnectedUsers] = useState([]);
+
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({
+        // 禁用历史记录，因为协同编辑有自己的历史管理
+        history: false,
+      }),
       Placeholder.configure({
         placeholder,
       }),
@@ -24,6 +33,18 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
         openOnClick: false,
         HTMLAttributes: {
           class: 'editor-link',
+        },
+      }),
+      // 协同编辑扩展
+      Collaboration.configure({
+        document: ydoc,
+      }),
+      // 协同光标扩展
+      CollaborationCursor.configure({
+        provider: provider,
+        user: {
+          name: `用户${Math.floor(Math.random() * 1000)}`,
+          color: `#${Math.floor(Math.random()*16777215).toString(16)}`,
         },
       }),
       SkeletonNode,
@@ -40,6 +61,56 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
       },
     },
   });
+
+  // 监听协同状态
+  useEffect(() => {
+    if (!provider) return;
+
+    const handleConnect = () => {
+      setCollaborationStatus('connected');
+      console.log('✅ 协同编辑已连接');
+    };
+
+    const handleDisconnect = () => {
+      setCollaborationStatus('disconnected');
+      console.log('❌ 协同编辑已断开');
+    };
+
+    const handleStatus = ({ status }) => {
+      setCollaborationStatus(status);
+    };
+
+    const handleAwareness = ({ states }) => {
+      const users = Array.from(states.entries()).map(([key, state]) => ({
+        id: key,
+        name: state.user?.name || 'Anonymous',
+        color: state.user?.color || '#000000',
+      }));
+      setConnectedUsers(users);
+    };
+
+    provider.on('connect', handleConnect);
+    provider.on('disconnect', handleDisconnect);
+    provider.on('status', handleStatus);
+    provider.on('awareness', handleAwareness);
+
+    return () => {
+      provider.off('connect', handleConnect);
+      provider.off('disconnect', handleDisconnect);
+      provider.off('status', handleStatus);
+      provider.off('awareness', handleAwareness);
+    };
+  }, []);
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (editor) {
+        editor.destroy();
+      }
+      cleanup();
+    };
+  }, [editor]);
 
   const addSkeleton = useCallback((microAppName = 'micro-app') => {
     if (editor) {
@@ -76,6 +147,60 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
 
   return (
     <div className="editor-container">
+      {/* 协同状态栏 */}
+      <div style={{
+        background: '#f8f9fa',
+        borderBottom: '1px solid #e9ecef',
+        padding: '8px 15px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        fontSize: '14px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: collaborationStatus === 'connected' ? '#28a745' : 
+                            collaborationStatus === 'connecting' ? '#ffc107' : '#dc3545'
+          }} />
+          <span>
+            协同状态: {
+              collaborationStatus === 'connected' ? '已连接' :
+              collaborationStatus === 'connecting' ? '连接中...' : '已断开'
+            }
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>在线用户: {connectedUsers.length}</span>
+          {connectedUsers.map(user => (
+            <div
+              key={user.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '2px 6px',
+                backgroundColor: user.color + '20',
+                borderRadius: '12px',
+                fontSize: '12px'
+              }}
+            >
+              <div
+                style={{
+                  width: '6px',
+                  height: '6px',
+                  borderRadius: '50%',
+                  backgroundColor: user.color
+                }}
+              />
+              {user.name}
+            </div>
+          ))}
+        </div>
+      </div>
+      
       <div className="editor-toolbar">
         {/* 文本格式 */}
         <button

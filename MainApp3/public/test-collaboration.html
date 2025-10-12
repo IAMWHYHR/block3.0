@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>金字塔协同测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        .log {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>金字塔协同功能测试</h1>
+    
+    <div class="test-container">
+        <h2>1. 协同服务器状态</h2>
+        <div id="server-status" class="status info">检查中...</div>
+        <button onclick="checkServerStatus()">检查服务器状态</button>
+    </div>
+
+    <div class="test-container">
+        <h2>2. 协同数据测试</h2>
+        <div id="collaboration-status" class="status info">未连接</div>
+        <button onclick="testCollaboration()">测试协同数据</button>
+        <button onclick="updateTestData()">更新测试数据</button>
+    </div>
+
+    <div class="test-container">
+        <h2>3. 微应用加载测试</h2>
+        <div id="microapp-status" class="status info">未加载</div>
+        <button onclick="loadMicroApp()">加载金字塔微应用</button>
+    </div>
+
+    <div class="test-container">
+        <h2>4. 调试日志</h2>
+        <div id="debug-log" class="log"></div>
+        <button onclick="clearLog()">清空日志</button>
+    </div>
+
+    <script>
+        let logContainer = document.getElementById('debug-log');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logEntry.style.color = type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#333';
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function clearLog() {
+            logContainer.innerHTML = '';
+        }
+
+        async function checkServerStatus() {
+            const statusDiv = document.getElementById('server-status');
+            try {
+                // 检查协同服务器
+                const ws = new WebSocket('ws://localhost:1234');
+                
+                ws.onopen = function() {
+                    statusDiv.innerHTML = '✅ 协同服务器连接成功';
+                    statusDiv.className = 'status success';
+                    log('协同服务器连接成功', 'success');
+                    ws.close();
+                };
+                
+                ws.onerror = function() {
+                    statusDiv.innerHTML = '❌ 协同服务器连接失败';
+                    statusDiv.className = 'status error';
+                    log('协同服务器连接失败', 'error');
+                };
+            } catch (error) {
+                statusDiv.innerHTML = '❌ 协同服务器检查失败: ' + error.message;
+                statusDiv.className = 'status error';
+                log('协同服务器检查失败: ' + error.message, 'error');
+            }
+        }
+
+        async function testCollaboration() {
+            const statusDiv = document.getElementById('collaboration-status');
+            try {
+                // 这里应该测试协同数据，但由于这是静态页面，我们只能检查服务器
+                statusDiv.innerHTML = '⚠️ 需要在主应用中测试协同数据';
+                statusDiv.className = 'status info';
+                log('协同数据测试需要在主应用中进行', 'info');
+            } catch (error) {
+                statusDiv.innerHTML = '❌ 协同数据测试失败: ' + error.message;
+                statusDiv.className = 'status error';
+                log('协同数据测试失败: ' + error.message, 'error');
+            }
+        }
+
+        function updateTestData() {
+            log('测试数据更新功能', 'info');
+            // 这里可以添加一些测试数据更新的逻辑
+        }
+
+        function loadMicroApp() {
+            const statusDiv = document.getElementById('microapp-status');
+            statusDiv.innerHTML = '⚠️ 请在主应用中加载微应用';
+            statusDiv.className = 'status info';
+            log('微应用加载需要在主应用中进行', 'info');
+        }
+
+        // 页面加载时自动检查服务器状态
+        window.onload = function() {
+            log('页面加载完成，开始检查服务器状态', 'info');
+            checkServerStatus();
+        };
+    </script>
+</body>
+</html>

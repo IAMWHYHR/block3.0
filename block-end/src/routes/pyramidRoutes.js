@@ -11,3 +11,10 @@ router.delete('/:id', pyramidController.deletePyramid);
 
 module.exports = router;
 
+
+
+
+
+
+
+
