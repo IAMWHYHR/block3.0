@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkeletonNode 测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .editor-container {
+            border: 1px solid #ccc;
+            min-height: 400px;
+            padding: 20px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>SkeletonNode 测试页面</h1>
+    
+    <div>
+        <button class="test-button" onclick="insertSkeletonNode()">插入 SkeletonNode</button>
+        <button class="test-button" onclick="clearEditor()">清空编辑器</button>
+    </div>
+    
+    <div id="editor" class="editor-container"></div>
+
+    <script type="module">
+        // 这里应该导入您的编辑器模块
+        // 由于这是测试页面，我们只是模拟插入节点
+        function insertSkeletonNode() {
+            const editor = document.getElementById('editor');
+            const skeletonNode = document.createElement('div');
+            skeletonNode.setAttribute('data-type', 'skeleton-node');
+            skeletonNode.setAttribute('data-micro-name', 'pyramid-app');
+            skeletonNode.setAttribute('data-ws-url', 'ws://localhost:1234');
+            skeletonNode.setAttribute('data-width', '100%');
+            skeletonNode.setAttribute('data-height', '200px');
+            skeletonNode.className = 'skeleton-node-container';
+            skeletonNode.innerHTML = `
+                <div style="padding: 20px; border: 2px dashed #ccc; text-align: center;">
+                    <h3>SkeletonNode 节点</h3>
+                    <p>微应用: pyramid-app</p>
+                    <p>WebSocket: ws://localhost:1234</p>
+                    <p>如果看到这个内容，说明节点插入成功</p>
+                </div>
+            `;
+            editor.appendChild(skeletonNode);
+        }
+
+        function clearEditor() {
+            document.getElementById('editor').innerHTML = '';
+        }
+
+        // 页面加载时自动插入一个节点
+        window.addEventListener('load', () => {
+            setTimeout(insertSkeletonNode, 1000);
+        });
+    </script>
+</body>
+</html>
