@@ -25,3 +25,4 @@ const SimpleSkeletonNodeView: React.FC<any> = ({ node }) => {
 };
 
 export default SimpleSkeletonNodeView;
+

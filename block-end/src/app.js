@@ -8,11 +8,29 @@ const PORT = process.env.PORT || 3000;
 
 // 中间件
 app.use(cors({
-  origin: ['http://localhost:7100', 'http://localhost:7200', 'http://localhost:7300', 'http://localhost:7500'],
-  credentials: true
+  origin: [
+    'http://localhost:3001',  // block-editor主应用
+    'http://localhost:7100', 
+    'http://localhost:7200', 
+    'http://localhost:7300', 
+    'http://localhost:7500',
+    'http://localhost:3000'   // 本地开发
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+// 处理OPTIONS预检请求
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // 路由
 app.use('/api/pyramids', pyramidRoutes);
@@ -59,7 +77,7 @@ app.use((err, req, res, next) => {
 });
 
 // 启动服务器
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Block 后端服务启动成功!`);
   console.log(`📍 服务地址: http://localhost:${PORT}`);
   console.log(`🔗 API 文档: http://localhost:${PORT}`);

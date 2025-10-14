@@ -13,3 +13,17 @@ export type {
   UserInfo, 
   CollaborationStatus 
 } from './collaboration/collaboration';
+
+// 导出编辑器协同相关
+export { 
+  EditorCollaborationManager,
+  createEditorCollaboration,
+  getDefaultEditorCollaboration,
+  setDefaultEditorCollaboration,
+  destroyDefaultEditorCollaboration
+} from './collaboration/editorCollaboration';
+export type { 
+  EditorCollaborationConfig, 
+  EditorUserInfo, 
+  EditorCollaborationStatus 
+} from './collaboration/editorCollaboration';

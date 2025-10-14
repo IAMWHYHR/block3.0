@@ -7,19 +7,19 @@ import './App.css';
 const microApps = [
   {
     name: 'demo-micro-app',
-    entry: '//localhost:3001',
+    entry: '//localhost:7200',
     container: '#micro-app-container',
     activeRule: '/demo',
   },
   {
     name: 'pyramid-app',
-    entry: '//localhost:3002',
+    entry: '//localhost:7200',
     container: '#micro-app-container',
     activeRule: '/pyramid',
   },
   {
     name: 'chart-app',
-    entry: '//localhost:3003',
+    entry: '//localhost:7200',
     container: '#micro-app-container',
     activeRule: '/chart',
   }
@@ -108,7 +108,20 @@ const App: React.FC = () => {
           <ReactEditor
             microName={microName}
             wsUrl={wsUrl}
+            roomName="block-editor-room"
+            enableCollaboration={true}
+            useHocuspocus={true}
+            userInfo={{
+              name: 'Block Editor 用户',
+              color: '#007bff'
+            }}
             onEditorReady={handleEditorReady}
+            onCollaborationStatusChange={(status) => {
+              console.log('协同状态变化:', status);
+            }}
+            onUsersChange={(users) => {
+              console.log('在线用户变化:', users);
+            }}
           />
         </div>
       </main>

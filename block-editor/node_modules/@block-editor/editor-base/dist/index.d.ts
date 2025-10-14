@@ -4,3 +4,5 @@ export { SkeletonNode } from './sketetonNode/skeletonNode';
 export type { SkeletonNodeAttributes } from './sketetonNode/skeletonNode';
 export { CollaborationManager } from './collaboration/collaboration';
 export type { CollaborationConfig, UserInfo, CollaborationStatus } from './collaboration/collaboration';
+export { EditorCollaborationManager, createEditorCollaboration, getDefaultEditorCollaboration, setDefaultEditorCollaboration, destroyDefaultEditorCollaboration } from './collaboration/editorCollaboration';
+export type { EditorCollaborationConfig, EditorUserInfo, EditorCollaborationStatus } from './collaboration/editorCollaboration';

@@ -254,22 +254,36 @@ function render(props = {}) {
   rootInstance.render(<MicroAppComponent />);
 }
 
+// qiankun 生命周期函数
 export async function bootstrap() {
+  console.log('[MicroApp] bootstrap');
   return Promise.resolve();
 }
 
 export async function mount(props) {
-  render(props);
-}
-
-export async function unmount() {
-  if (rootInstance) {
-    rootInstance.unmount();
-    rootInstance = null;
+  console.log('[MicroApp] mount', props);
+  try {
+    render(props);
+  } catch (error) {
+    console.error('[MicroApp] mount error:', error);
   }
 }
 
+export async function unmount() {
+  console.log('[MicroApp] unmount');
+  try {
+    if (rootInstance) {
+      rootInstance.unmount();
+      rootInstance = null;
+    }
+  } catch (error) {
+    console.error('[MicroApp] unmount error:', error);
+  }
+}
+
+// 独立运行时的渲染
 if (!window.__POWERED_BY_QIANKUN__) {
+  console.log('[MicroApp] 独立运行模式');
   render();
 }
 

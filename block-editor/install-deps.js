@@ -25,3 +25,4 @@ try {
   console.error('❌ 安装依赖失败:', error.message);
   process.exit(1);
 }
+

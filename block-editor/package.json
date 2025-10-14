@@ -10,10 +10,15 @@
     "dev": "npm run dev --workspace=app",
     "build": "npm run build --workspace=app",
     "build:packages": "npm run build --workspaces",
-    "install:all": "npm install"
+    "install:all": "npm install",
+    "start:app": "npm run dev --workspace=app",
+    "start:microapp": "npm run start --workspace=../MicroApp",
+    "start:backend": "npm run start --workspace=../block-end",
+    "start:collaboration": "npm run collaboration-server --workspace=../MainApp3"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
   }
 }
+

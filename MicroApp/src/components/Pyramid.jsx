@@ -198,8 +198,26 @@ const Pyramid = (props) => {
     try {
       setLoading(true);
       setError('');
+      console.log('正在请求API:', `${API_BASE_URL}/pyramids`);
+      
       const response = await fetch(`${API_BASE_URL}/pyramids`);
+      console.log('API响应状态:', response.status, response.statusText);
+      
+      // 检查响应是否成功
+      if (!response.ok) {
+        throw new Error(`HTTP错误: ${response.status} ${response.statusText}`);
+      }
+      
+      // 检查响应内容类型
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('收到非JSON响应:', text.substring(0, 200));
+        throw new Error('服务器返回的不是JSON格式数据');
+      }
+      
       const result = await response.json();
+      console.log('API响应数据:', result);
       
       if (result.success) {
         setPyramids(result.data);
@@ -208,8 +226,12 @@ const Pyramid = (props) => {
         setError('获取金字塔列表失败: ' + result.message);
       }
     } catch (err) {
-      setError('网络错误: ' + err.message);
       console.error('获取金字塔列表失败:', err);
+      if (err.message.includes('Unexpected token')) {
+        setError('服务器返回了无效的JSON数据，请检查后端服务是否正常运行');
+      } else {
+        setError('网络错误: ' + err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -315,8 +337,15 @@ const Pyramid = (props) => {
   };
 
   const renderPyramidLevel = (level, index) => {
-    const width = 100 - (index * 15); // 每层递减15%
-    const height = 60 / levels; // 根据层级数量调整高度
+    // 正金字塔样式：底层最大，顶层最小
+    const baseWidth = 80; // 底层宽度百分比
+    const width = baseWidth - ((levels - 1 - index) * (baseWidth / (levels - 1))); // 反向计算：底层最大
+    const height = 50 / levels; // 根据层级数量调整高度
+    const leftOffset = (100 - width) / 2; // 居中对齐
+    const topOffset = (levels - 1 - index) * 8; // 反向偏移：底层在最下面
+    
+    // 计算三角形的倾斜角度，使每层都形成梯形
+    const skewAngle = 15; // 倾斜角度
     
     return (
       <div
@@ -326,14 +355,22 @@ const Pyramid = (props) => {
           height: `${height}vh`,
           backgroundColor: level.color,
           margin: '0 auto',
-          marginBottom: '2px',
+          marginBottom: '0px',
+          marginLeft: `${leftOffset}%`,
+          marginTop: `-${topOffset}px`, // 向上偏移形成金字塔
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: '8px',
           position: 'relative',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          transition: 'all 0.3s ease'
+          boxShadow: '0 6px 20px rgba(0,0,0,0.2)',
+          transition: 'all 0.3s ease',
+          transform: `perspective(1000px) rotateX(${skewAngle}deg)`, // 3D透视效果
+          transformStyle: 'preserve-3d',
+          zIndex: index + 1, // 底层z-index更高，顶层最低
+          border: '3px solid rgba(255,255,255,0.4)', // 白色边框增强立体感
+          borderRadius: '0 0 8px 8px', // 底部圆角
+          // 创建梯形效果
+          clipPath: 'polygon(10% 0%, 90% 0%, 100% 100%, 0% 100%)',
         }}
       >
         <input
@@ -345,10 +382,13 @@ const Pyramid = (props) => {
             border: 'none',
             color: 'white',
             textAlign: 'center',
-            fontSize: '16px',
+            fontSize: Math.max(12, 18 - (levels - 1 - index) * 2) + 'px', // 底层字体更大
             fontWeight: 'bold',
             outline: 'none',
-            width: '80%'
+            width: '80%',
+            textShadow: '2px 2px 4px rgba(0,0,0,0.7)',
+            padding: '4px 8px',
+            transform: 'translateZ(10px)', // 3D效果
           }}
         />
         <input
@@ -357,13 +397,15 @@ const Pyramid = (props) => {
           onChange={(e) => updateLevelColor(index, e.target.value)}
           style={{
             position: 'absolute',
-            right: '5px',
-            top: '5px',
+            right: '12px',
+            top: '12px',
             width: '20px',
             height: '20px',
-            border: 'none',
-            borderRadius: '3px',
-            cursor: 'pointer'
+            border: '2px solid white',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+            transform: 'translateZ(10px)', // 3D效果
           }}
         />
       </div>
@@ -532,10 +574,65 @@ const Pyramid = (props) => {
         display: 'flex', 
         flexDirection: 'column',
         alignItems: 'center',
-        minHeight: '300px',
-        justifyContent: 'center'
+        minHeight: '500px',
+        justifyContent: 'center',
+        padding: '40px 20px',
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '16px',
+        position: 'relative',
+        overflow: 'hidden',
+        transform: 'perspective(1000px) rotateX(5deg)', // 整体3D倾斜
+        transformStyle: 'preserve-3d',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
       }}>
-        {levelData.map((level, index) => renderPyramidLevel(level, index))}
+        {/* 金字塔背景装饰 */}
+        <div style={{
+          position: 'absolute',
+          top: '30%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '300px',
+          height: '300px',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%)',
+          borderRadius: '50%',
+          zIndex: 0
+        }} />
+        
+        {/* 金字塔层级容器 */}
+        <div style={{ 
+          position: 'relative', 
+          zIndex: 1,
+          transform: 'translateZ(50px)', // 向前突出
+          transformStyle: 'preserve-3d'
+        }}>
+          {levelData.map((level, index) => renderPyramidLevel(level, index))}
+        </div>
+        
+        {/* 金字塔底部大阴影 */}
+        <div style={{
+          position: 'absolute',
+          bottom: '20px',
+          left: '50%',
+          transform: 'translateX(-50%) translateZ(-20px)',
+          width: '70%',
+          height: '15px',
+          background: 'rgba(0,0,0,0.4)',
+          borderRadius: '50%',
+          filter: 'blur(8px)',
+          zIndex: 0
+        }} />
+        
+        {/* 金字塔侧面阴影 */}
+        <div style={{
+          position: 'absolute',
+          top: '20%',
+          left: '10%',
+          width: '80%',
+          height: '60%',
+          background: 'linear-gradient(45deg, rgba(0,0,0,0.1) 0%, transparent 50%)',
+          transform: 'skewX(-15deg) translateZ(-30px)',
+          zIndex: 0
+        }} />
       </div>
 
       <div style={{ 
@@ -551,7 +648,9 @@ const Pyramid = (props) => {
           <li>点击文本可直接编辑每层内容</li>
           <li>点击颜色选择器可更改每层颜色</li>
           <li>使用 +/- 按钮调整金字塔层级（2-6层）</li>
-          <li>金字塔会自动调整大小和间距</li>
+          <li>3D金字塔形状：每层都是梯形，形成立体金字塔效果</li>
+          <li>具有3D透视、阴影和渐变背景效果</li>
+          <li>每层都有立体阴影效果和白色边框</li>
           <li>选择模板可快速加载预设金字塔</li>
           <li>保存当前金字塔到后端数据库</li>
         </ul>

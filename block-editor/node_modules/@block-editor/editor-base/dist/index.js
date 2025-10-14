@@ -4,3 +4,5 @@ export { Editor as ReactEditor } from './editor/Editor';
 export { SkeletonNode } from './sketetonNode/skeletonNode';
 // 导出协同相关
 export { CollaborationManager } from './collaboration/collaboration';
+// 导出编辑器协同相关
+export { EditorCollaborationManager, createEditorCollaboration, getDefaultEditorCollaboration, setDefaultEditorCollaboration, destroyDefaultEditorCollaboration } from './collaboration/editorCollaboration';
