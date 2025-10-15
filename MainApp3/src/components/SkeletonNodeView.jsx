@@ -170,9 +170,21 @@ const SkeletonNodeView = ({ node, updateAttributes, deleteNode, getPos, editor }
       // 使用 qiankun 加载微应用，使用唯一名称避免冲突
       const uniqueName = getUniqueAppName(config.name);
       
-      // 为金字塔微应用传递协同数据
+      // 获取全局BlockContext
+      const globalBlockContext = window.blockContext;
+      
+      // 为所有微应用传递BlockContext
       const props = { 
         container: containerRef.current,
+        // 传递BlockContext到所有微应用
+        blockContext: globalBlockContext,
+        // 传递事件总线（如果存在）
+        eventBus: globalBlockContext?.eventBus,
+        // 传递工具栏API（兼容旧接口）
+        toolbarAPI: {
+          addToolBarItem: globalBlockContext?.toolBar?.addToolBarItem,
+          removeToolBarItem: globalBlockContext?.toolBar?.removeToolBarItem
+        },
         ...(microAppName === 'pyramid-app' ? {
           // 传递金字塔协同相关数据
           pyramidProvider,
@@ -203,16 +215,29 @@ const SkeletonNodeView = ({ node, updateAttributes, deleteNode, getPos, editor }
         } : {})
       };
 
-      console.log('🔍 金字塔微应用 props 详细调试:', {
-        isCollaborationEnabled: !!(pyramidProvider && pyramidSharedData),
-        pyramidProvider: !!pyramidProvider,
-        pyramidSharedData: !!pyramidSharedData,
-        pyramidProviderType: typeof pyramidProvider,
-        pyramidSharedDataType: typeof pyramidSharedData,
-        pyramidData,
-        pyramidDataKeys: pyramidData ? Object.keys(pyramidData) : [],
-        debugInfo: props.debugInfo,
-        microAppName
+      console.log('🔍 微应用 props 详细调试:', {
+        microAppName,
+        blockContext: !!globalBlockContext,
+        blockContextServices: globalBlockContext ? {
+          toolBar: !!globalBlockContext.toolBar,
+          viewService: !!globalBlockContext.viewService,
+          lifeCycleService: !!globalBlockContext.lifeCycleService,
+          sharedData: !!globalBlockContext.sharedData,
+          envService: !!globalBlockContext.envService,
+          eventBus: !!globalBlockContext.eventBus
+        } : null,
+        eventBus: !!props.eventBus,
+        toolbarAPI: !!props.toolbarAPI,
+        ...(microAppName === 'pyramid-app' ? {
+          isCollaborationEnabled: !!(pyramidProvider && pyramidSharedData),
+          pyramidProvider: !!pyramidProvider,
+          pyramidSharedData: !!pyramidSharedData,
+          pyramidProviderType: typeof pyramidProvider,
+          pyramidSharedDataType: typeof pyramidSharedData,
+          pyramidData,
+          pyramidDataKeys: pyramidData ? Object.keys(pyramidData) : [],
+          debugInfo: props.debugInfo
+        } : {})
       });
 
       const instance = await loadMicroApp({

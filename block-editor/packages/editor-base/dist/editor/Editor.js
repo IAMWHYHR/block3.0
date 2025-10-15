@@ -1,12 +1,18 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { StarterKit } from '@tiptap/starter-kit';
+import Placeholder from '@tiptap/extension-placeholder';
+import Underline from '@tiptap/extension-underline';
+import Strike from '@tiptap/extension-strike';
+import Code from '@tiptap/extension-code';
+import CodeBlock from '@tiptap/extension-code-block';
+import Link from '@tiptap/extension-link';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { SkeletonNode } from '../sketetonNode/skeletonNode';
 import { EditorCollaborationManager } from '../collaboration/editorCollaboration';
-export const Editor = ({ microName, wsUrl, roomName = 'default-room', enableCollaboration = true, useHocuspocus = true, userInfo, onEditorReady, onCollaborationStatusChange, onUsersChange }) => {
+export const Editor = ({ microName, wsUrl, roomName = 'default-room', enableCollaboration = true, useHocuspocus = true, userInfo, placeholder = '开始编写...', onEditorReady, onCollaborationStatusChange, onUsersChange, onUpdate }) => {
     const collaborationManagerRef = useRef(null);
     const rootRef = useRef(null);
     const [collaborationStatus, setCollaborationStatus] = useState('disconnected');
@@ -76,6 +82,19 @@ export const Editor = ({ microName, wsUrl, roomName = 'default-room', enableColl
                 // 禁用历史记录，因为协同编辑有自己的历史管理
                 history: enableCollaboration ? false : undefined,
             }),
+            Placeholder.configure({
+                placeholder,
+            }),
+            Underline,
+            Strike,
+            Code,
+            CodeBlock,
+            Link.configure({
+                openOnClick: false,
+                HTMLAttributes: {
+                    class: 'editor-link',
+                },
+            }),
             ...(enableCollaboration && isCollaborationReady && collaborationManagerRef.current ? [
                 Collaboration.configure({
                     document: collaborationManagerRef.current.getYDoc(),
@@ -90,9 +109,12 @@ export const Editor = ({ microName, wsUrl, roomName = 'default-room', enableColl
             ] : []),
             SkeletonNode
         ],
-        content: '<p>欢迎使用编辑器！</p>',
+        content: '',
         onUpdate: ({ editor }) => {
             console.log('编辑器内容已更新');
+            if (onUpdate) {
+                onUpdate(editor.getHTML());
+            }
         },
         onCreate: ({ editor }) => {
             console.log('🎉 TipTap 编辑器创建完成!');
@@ -128,8 +150,44 @@ export const Editor = ({ microName, wsUrl, roomName = 'default-room', enableColl
                     }
                 });
             }
-        }
+        },
+        editorProps: {
+            attributes: {
+                class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none',
+            },
+        },
     });
+    // 工具栏回调函数
+    const addSkeleton = useCallback((skeletonMicroName = 'micro-app') => {
+        if (editor) {
+            editor.chain().focus().insertContent({
+                type: 'skeletonNode',
+                attrs: {
+                    microName: skeletonMicroName,
+                    wsUrl,
+                    width: '100%',
+                    height: '300px'
+                }
+            }).run();
+        }
+    }, [editor, wsUrl]);
+    const setLink = useCallback(() => {
+        if (!editor)
+            return;
+        const previousUrl = editor.getAttributes('link').href;
+        const url = window.prompt('URL', previousUrl);
+        // cancelled
+        if (url === null) {
+            return;
+        }
+        // empty
+        if (url === '') {
+            editor.chain().focus().extendMarkRange('link').unsetLink().run();
+            return;
+        }
+        // update link
+        editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    }, [editor]);
     // 清理函数
     useEffect(() => {
         return () => {
@@ -170,6 +228,6 @@ export const Editor = ({ microName, wsUrl, roomName = 'default-room', enableColl
                                             height: '6px',
                                             borderRadius: '50%',
                                             backgroundColor: user.color
-                                        } }), user.name] }, user.id)))] })] })), _jsx(EditorContent, { editor: editor })] }));
+                                        } }), user.name] }, user.id)))] })] })), _jsxs("div", { className: "editor-toolbar", children: [_jsx("button", { onClick: () => editor.chain().focus().toggleBold().run(), disabled: !editor.can().chain().focus().toggleBold().run(), className: `toolbar-btn ${editor.isActive('bold') ? 'active' : ''}`, children: "\u7C97\u4F53" }), _jsx("button", { onClick: () => editor.chain().focus().toggleItalic().run(), disabled: !editor.can().chain().focus().toggleItalic().run(), className: `toolbar-btn ${editor.isActive('italic') ? 'active' : ''}`, children: "\u659C\u4F53" }), _jsx("button", { onClick: () => editor.chain().focus().toggleUnderline().run(), disabled: !editor.can().chain().focus().toggleUnderline().run(), className: `toolbar-btn ${editor.isActive('underline') ? 'active' : ''}`, children: "\u4E0B\u5212\u7EBF" }), _jsx("button", { onClick: () => editor.chain().focus().toggleStrike().run(), disabled: !editor.can().chain().focus().toggleStrike().run(), className: `toolbar-btn ${editor.isActive('strike') ? 'active' : ''}`, children: "\u5220\u9664\u7EBF" }), _jsx("button", { onClick: () => editor.chain().focus().toggleCode().run(), disabled: !editor.can().chain().focus().toggleCode().run(), className: `toolbar-btn ${editor.isActive('code') ? 'active' : ''}`, children: "\u4EE3\u7801" }), _jsx("div", { style: { width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' } }), _jsx("button", { onClick: () => editor.chain().focus().toggleHeading({ level: 1 }).run(), className: `toolbar-btn ${editor.isActive('heading', { level: 1 }) ? 'active' : ''}`, children: "H1" }), _jsx("button", { onClick: () => editor.chain().focus().toggleHeading({ level: 2 }).run(), className: `toolbar-btn ${editor.isActive('heading', { level: 2 }) ? 'active' : ''}`, children: "H2" }), _jsx("button", { onClick: () => editor.chain().focus().toggleHeading({ level: 3 }).run(), className: `toolbar-btn ${editor.isActive('heading', { level: 3 }) ? 'active' : ''}`, children: "H3" }), _jsx("div", { style: { width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' } }), _jsx("button", { onClick: () => editor.chain().focus().toggleBulletList().run(), className: `toolbar-btn ${editor.isActive('bulletList') ? 'active' : ''}`, children: "\u65E0\u5E8F\u5217\u8868" }), _jsx("button", { onClick: () => editor.chain().focus().toggleOrderedList().run(), className: `toolbar-btn ${editor.isActive('orderedList') ? 'active' : ''}`, children: "\u6709\u5E8F\u5217\u8868" }), _jsx("button", { onClick: () => editor.chain().focus().toggleBlockquote().run(), className: `toolbar-btn ${editor.isActive('blockquote') ? 'active' : ''}`, children: "\u5F15\u7528" }), _jsx("button", { onClick: () => editor.chain().focus().toggleCodeBlock().run(), className: `toolbar-btn ${editor.isActive('codeBlock') ? 'active' : ''}`, children: "\u4EE3\u7801\u5757" }), _jsx("div", { style: { width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' } }), _jsx("button", { onClick: setLink, className: `toolbar-btn ${editor.isActive('link') ? 'active' : ''}`, children: "\u94FE\u63A5" }), _jsx("div", { style: { width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' } }), _jsx("button", { onClick: () => addSkeleton('micro-app'), className: "toolbar-btn", title: "\u63D2\u5165\u5FAE\u5E94\u75281 (\u91D1\u5B57\u5854)", children: "\uD83C\uDFD7\uFE0F \u5FAE\u5E94\u75281" }), _jsx("button", { onClick: () => addSkeleton('micro-app-2'), className: "toolbar-btn", title: "\u63D2\u5165\u5FAE\u5E94\u75282 (\u529F\u80FD\u6F14\u793A)", children: "\uD83D\uDD27 \u5FAE\u5E94\u75282" }), _jsx("button", { onClick: () => addSkeleton('pyramid-app'), className: "toolbar-btn", title: "\u63D2\u5165\u91D1\u5B57\u5854\u5E94\u7528", children: "\uD83D\uDCCA \u91D1\u5B57\u5854" }), _jsx("div", { style: { width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' } }), _jsx("button", { onClick: () => editor.chain().focus().undo().run(), disabled: !editor.can().chain().focus().undo().run(), className: "toolbar-btn", children: "\u64A4\u9500" }), _jsx("button", { onClick: () => editor.chain().focus().redo().run(), disabled: !editor.can().chain().focus().redo().run(), className: "toolbar-btn", children: "\u91CD\u505A" })] }), _jsx("div", { className: "editor-content", children: _jsx(EditorContent, { editor: editor }) })] }));
 };
 export default Editor;

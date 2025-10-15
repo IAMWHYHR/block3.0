@@ -1,7 +1,7 @@
 import './public-path';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import Pyramid from './components/Pyramid';
+import AntdPyramid from './components/AntdPyramid';
 import { createAPIProxy } from 'shared-sdk';
 
 let rootInstance = null;
@@ -245,7 +245,7 @@ function render(props = {}) {
         </div>
         
         <div style={{ marginTop: '30px' }}>
-          <Pyramid {...props} />
+          <AntdPyramid {...props} />
         </div>
       </div>
     );
