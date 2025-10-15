@@ -11,6 +11,7 @@ import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
 import { SkeletonNode } from '../nodes/SkeletonNode';
 import { provider, ydoc, cleanup } from '../collaboration';
+import './Editor.css';
 
 const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
   const [collaborationStatus, setCollaborationStatus] = useState('connecting');
@@ -148,23 +149,9 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
   return (
     <div className="editor-container">
       {/* 协同状态栏 */}
-      <div style={{
-        background: '#f8f9fa',
-        borderBottom: '1px solid #e9ecef',
-        padding: '8px 15px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        fontSize: '14px'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            backgroundColor: collaborationStatus === 'connected' ? '#28a745' : 
-                            collaborationStatus === 'connecting' ? '#ffc107' : '#dc3545'
-          }} />
+      <div className="collaboration-status-bar">
+        <div className="collaboration-status-info">
+          <div className={`collaboration-status-indicator ${collaborationStatus}`} />
           <span>
             协同状态: {
               collaborationStatus === 'connected' ? '已连接' :
@@ -172,28 +159,17 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
             }
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="collaboration-users-info">
           <span>在线用户: {connectedUsers.length}</span>
           {connectedUsers.map(user => (
             <div
               key={user.id}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '2px 6px',
-                backgroundColor: user.color + '20',
-                borderRadius: '12px',
-                fontSize: '12px'
-              }}
+              className="collaboration-user-item"
+              style={{ backgroundColor: user.color + '20' }}
             >
               <div
-                style={{
-                  width: '6px',
-                  height: '6px',
-                  borderRadius: '50%',
-                  backgroundColor: user.color
-                }}
+                className="collaboration-user-indicator"
+                style={{ backgroundColor: user.color }}
               />
               {user.name}
             </div>
@@ -240,7 +216,7 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
         </button>
 
         {/* 分隔线 */}
-        <div style={{ width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' }} />
+        <div className="toolbar-separator" />
 
         {/* 标题 */}
         <button
@@ -263,7 +239,7 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
         </button>
 
         {/* 分隔线 */}
-        <div style={{ width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' }} />
+        <div className="toolbar-separator" />
 
         {/* 列表 */}
         <button
@@ -292,12 +268,12 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
         </button>
 
         {/* 分隔线 */}
-        <div style={{ width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' }} />
+        <div className="toolbar-separator" />
 
         {/* 对齐功能暂时移除，避免兼容性问题 */}
 
         {/* 分隔线 */}
-        <div style={{ width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' }} />
+        <div className="toolbar-separator" />
 
         {/* 链接 */}
         <button
@@ -308,7 +284,7 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
         </button>
 
         {/* 分隔线 */}
-        <div style={{ width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' }} />
+        <div className="toolbar-separator" />
 
         {/* 微应用骨架 */}
         <button
@@ -334,7 +310,7 @@ const Editor = ({ onUpdate, placeholder = '开始编写...' }) => {
         </button>
 
         {/* 分隔线 */}
-        <div style={{ width: '1px', height: '20px', background: '#dee2e6', margin: '0 4px' }} />
+        <div className="toolbar-separator" />
 
         {/* 撤销/重做 */}
         <button

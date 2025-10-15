@@ -9,17 +9,18 @@ export const provider = new HocuspocusProvider({
   url: 'ws://localhost:1234',
   name: 'mainapp3-editor', // 文档名称
   document: ydoc,
+  connect: true, // 自动连接
   onConnect: () => {
     console.log('✅ 协同编辑已连接');
   },
-  onDisconnect: () => {
-    console.log('❌ 协同编辑已断开');
+  onDisconnect: ({ event }) => {
+    console.log('❌ 协同编辑已断开', event);
   },
   onStatus: ({ status }) => {
     console.log('协同状态:', status);
   },
-  onAuthenticationFailed: () => {
-    console.log('❌ 协同认证失败');
+  onAuthenticationFailed: ({ reason }) => {
+    console.log('❌ 协同认证失败:', reason);
   },
   onLoad: () => {
     console.log('📄 文档已加载');

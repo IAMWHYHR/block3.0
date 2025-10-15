@@ -1,5 +1,5 @@
 import React from 'react';
-import { EditorUserInfo, EditorCollaborationStatus } from '../collaboration/editorCollaboration';
+import { EditorUserInfo } from '../collaboration/editorCollaboration';
 export interface EditorProps {
     microName: string;
     wsUrl: string;
@@ -8,9 +8,6 @@ export interface EditorProps {
     useHocuspocus?: boolean;
     userInfo?: Partial<EditorUserInfo>;
     placeholder?: string;
-    onEditorReady?: (editor: any) => void;
-    onCollaborationStatusChange?: (status: EditorCollaborationStatus) => void;
-    onUsersChange?: (users: EditorUserInfo[]) => void;
     onUpdate?: (html: string) => void;
 }
 export declare const Editor: React.FC<EditorProps>;

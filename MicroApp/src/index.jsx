@@ -2,6 +2,7 @@ import './public-path';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import AntdPyramid from './components/AntdPyramid';
+import SimplePyramid from './components/SimplePyramid';
 import { createAPIProxy } from 'shared-sdk';
 
 let rootInstance = null;
@@ -17,10 +18,17 @@ function render(props = {}) {
   const api = createAPIProxy(props);
   
   // 调试信息：显示接收到的 props
-  console.log('🔍 MicroApp 接收到的 props:', props);
+  console.log('🔍 MicroApp 接收到的 props:', {
+    ...props,
+    collaborationService: props.collaborationService ? '[CollaborationService]' : undefined,
+    blockContext: props.blockContext ? '[BlockContext]' : undefined,
+    pyramidProvider: props.pyramidProvider ? '[Provider]' : undefined,
+    pyramidSharedData: props.pyramidSharedData ? '[SharedData]' : undefined,
+    pyramidList: props.pyramidList ? '[List]' : undefined,
+    pyramidYdoc: props.pyramidYdoc ? '[YDoc]' : undefined
+  });
   
   const MicroAppComponent = () => {
-    const [sharedValue, setSharedValue] = React.useState('');
     
     // 自动添加工具栏按钮
     React.useEffect(() => {
@@ -36,7 +44,7 @@ function render(props = {}) {
 
     // 使用 BlockContext 功能
     React.useEffect(() => {
-      const blockCtx = api.blockContext;
+      const blockCtx = props.blockContext || api.blockContext;
       if (!blockCtx) {
         console.warn('[MicroApp] BlockContext 不可用');
         return;
@@ -108,6 +116,15 @@ function render(props = {}) {
         blockCtx.envService.onDarkModeChange(darkModeListener);
         blockCtx.envService.onLanguageChange(languageListener);
         blockCtx.envService.onDocModeChange(docModeListener);
+
+        // 在清理函数中移除监听器
+        return () => {
+          if (blockCtx.envService) {
+            blockCtx.envService.offDarkModeChange(darkModeListener);
+            blockCtx.envService.offLanguageChange(languageListener);
+            blockCtx.envService.offDocModeChange(docModeListener);
+          }
+        };
       }
 
       // 视图服务示例
@@ -163,90 +180,13 @@ function render(props = {}) {
         unsubscribeData();
         mapUnsubscribe();
         arrayUnsubscribe();
-        if (blockCtx.envService) {
-          blockCtx.envService.offDarkModeChange(darkModeListener);
-          blockCtx.envService.offLanguageChange(languageListener);
-          blockCtx.envService.offDocModeChange(docModeListener);
-        }
       };
     }, []);
 
-    const handleSetSharedData = () => {
-      const blockCtx = api.blockContext;
-      if (blockCtx && blockCtx.sharedData) {
-        blockCtx.sharedData.set('microAppData', `来自微应用的数据: ${Date.now()}`);
-      }
-    };
-
-    const handleShowModal = async () => {
-      const blockCtx = api.blockContext;
-      if (blockCtx && blockCtx.viewService) {
-        const result = await blockCtx.viewService.openModal({
-          title: '微应用1对话框',
-          content: '这是一个来自微应用1的模态对话框',
-          width: 300,
-          height: 150
-        });
-        console.log('Modal result:', result);
-      }
-    };
-
-    const handleOpenConfig = async () => {
-      const blockCtx = api.blockContext;
-      if (blockCtx && blockCtx.viewService) {
-        const result = await blockCtx.viewService.openConfig({
-          title: '微应用1配置',
-          width: 400,
-          height: 300
-        });
-        console.log('Config result:', result);
-      }
-    };
-
-    const handleToggleFullscreen = async () => {
-      const blockCtx = api.blockContext;
-      if (blockCtx && blockCtx.viewService) {
-        try {
-          await blockCtx.viewService.requestFullscreen({ element: 'body' });
-          setTimeout(() => {
-            blockCtx.viewService.exitFullscreen();
-          }, 3000);
-        } catch (error) {
-          console.error('Fullscreen error:', error);
-        }
-      }
-    };
 
     return (
-      <div style={{ padding: 20 }}>
-        <h2>Micro App 页面</h2>
-        <p>这是通过 qiankun 加载的微应用。</p>
-        <p style={{ color: '#28a745', fontWeight: 'bold' }}>
-          ✓ 微应用已通过 BlockContext 向主应用工具栏添加功能按钮
-        </p>
-        
-        <div style={{ marginTop: '20px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-          <h4>BlockContext 功能演示:</h4>
-          <p>共享数据: {sharedValue || '暂无数据'}</p>
-          <div style={{ marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button onClick={handleSetSharedData} style={{ padding: '5px 10px' }}>
-              设置共享数据
-            </button>
-            <button onClick={handleShowModal} style={{ padding: '5px 10px' }}>
-              显示对话框
-            </button>
-            <button onClick={handleOpenConfig} style={{ padding: '5px 10px' }}>
-              打开配置
-            </button>
-            <button onClick={handleToggleFullscreen} style={{ padding: '5px 10px' }}>
-              全屏演示
-            </button>
-          </div>
-        </div>
-        
-        <div style={{ marginTop: '30px' }}>
-          <AntdPyramid {...props} />
-        </div>
+      <div>
+        <SimplePyramid {...props} />
       </div>
     );
   };

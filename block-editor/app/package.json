@@ -5,19 +5,25 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "collaboration": "node collaboration-server.js",
+    "start:collaboration": "node collaboration-server.js",
+    "dev:full": "concurrently \"npm run collaboration\" \"npm run dev\""
   },
   "dependencies": {
     "@block-editor/editor-base": "file:../packages/editor-base",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "qiankun": "^2.10.0"
+    "qiankun": "^2.10.0",
+    "@hocuspocus/server": "^2.6.0",
+    "@hocuspocus/extension-logger": "^2.6.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "@vitejs/plugin-react": "^4.0.0",
     "vite": "^4.4.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "concurrently": "^8.2.0"
   }
 }

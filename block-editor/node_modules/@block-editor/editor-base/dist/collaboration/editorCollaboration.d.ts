@@ -24,6 +24,8 @@ export declare class EditorCollaborationManager {
     private statusCallbacks;
     private userCallbacks;
     private isHocuspocus;
+    private _isInitialized;
+    private _isDestroyed;
     constructor(config: EditorCollaborationConfig);
     private bindEvents;
     private setStatus;
@@ -34,10 +36,13 @@ export declare class EditorCollaborationManager {
     getOnlineUsers(): EditorUserInfo[];
     getStatus(): EditorCollaborationStatus;
     destroy(): void;
+    private performDestroy;
     getProvider(): CollaborationProvider;
     getYDoc(): Y.Doc;
     getAwareness(): any;
     isUsingHocuspocus(): boolean;
+    isInitialized(): boolean;
+    isDestroyed(): boolean;
 }
 export declare const createEditorCollaboration: (config: EditorCollaborationConfig) => EditorCollaborationManager;
 export declare const getDefaultEditorCollaboration: () => EditorCollaborationManager | null;

@@ -1,0 +1,259 @@
+/* Editor组件样式 */
+
+/* 协同状态栏 */
+.collaboration-status-bar {
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  padding: 8px 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.collaboration-status-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collaboration-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.collaboration-status-indicator.connected {
+  background-color: #28a745;
+}
+
+.collaboration-status-indicator.connecting {
+  background-color: #ffc107;
+}
+
+.collaboration-status-indicator.disconnected {
+  background-color: #dc3545;
+}
+
+.collaboration-users-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collaboration-user-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.collaboration-user-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* 工具栏 */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  flex-wrap: wrap;
+}
+
+.toolbar-btn {
+  padding: 6px 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  background: #fff;
+  color: #495057;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn:hover {
+  background: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toolbar-btn.active {
+  background: #007bff;
+  color: #fff;
+  border-color: #007bff;
+}
+
+.toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background: #dee2e6;
+  margin: 0 4px;
+}
+
+/* 编辑器内容区域 */
+.editor-content {
+  min-height: 300px;
+  padding: 16px;
+  background: #fff;
+}
+
+/* 编辑器容器 */
+.editor-container {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 编辑器内容样式 */
+.editor-content .ProseMirror {
+  outline: none;
+  min-height: 200px;
+  padding: 16px;
+  line-height: 1.6;
+  font-size: 16px;
+  color: #333;
+}
+
+.editor-content .ProseMirror p {
+  margin: 0 0 1em 0;
+}
+
+.editor-content .ProseMirror h1,
+.editor-content .ProseMirror h2,
+.editor-content .ProseMirror h3 {
+  margin: 1.5em 0 0.5em 0;
+  font-weight: bold;
+}
+
+.editor-content .ProseMirror h1 {
+  font-size: 2em;
+  border-bottom: 2px solid #e9ecef;
+  padding-bottom: 0.3em;
+}
+
+.editor-content .ProseMirror h2 {
+  font-size: 1.5em;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 0.3em;
+}
+
+.editor-content .ProseMirror h3 {
+  font-size: 1.25em;
+}
+
+.editor-content .ProseMirror ul,
+.editor-content .ProseMirror ol {
+  padding-left: 1.5em;
+  margin: 1em 0;
+}
+
+.editor-content .ProseMirror li {
+  margin: 0.25em 0;
+}
+
+.editor-content .ProseMirror blockquote {
+  border-left: 4px solid #e9ecef;
+  padding-left: 1em;
+  margin: 1em 0;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.editor-content .ProseMirror code {
+  background: #f8f9fa;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.editor-content .ProseMirror pre {
+  background: #f8f9fa;
+  padding: 1em;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.editor-content .ProseMirror pre code {
+  background: none;
+  padding: 0;
+}
+
+.editor-content .ProseMirror a {
+  color: #007bff;
+  text-decoration: underline;
+}
+
+.editor-content .ProseMirror a:hover {
+  color: #0056b3;
+}
+
+.editor-content .ProseMirror strong {
+  font-weight: bold;
+}
+
+.editor-content .ProseMirror em {
+  font-style: italic;
+}
+
+.editor-content .ProseMirror u {
+  text-decoration: underline;
+}
+
+.editor-content .ProseMirror s {
+  text-decoration: line-through;
+}
+
+/* 占位符样式 */
+.editor-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #adb5bd;
+  pointer-events: none;
+  height: 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .editor-toolbar {
+    padding: 6px 8px;
+    gap: 2px;
+  }
+  
+  .toolbar-btn {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  
+  .collaboration-status-bar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  
+  .collaboration-users-info {
+    flex-wrap: wrap;
+  }
+  
+  .editor-content {
+    padding: 12px;
+  }
+  
+  .editor-content .ProseMirror {
+    font-size: 14px;
+    padding: 12px;
+  }
+}

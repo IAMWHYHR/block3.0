@@ -1,9 +1,11 @@
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { WebsocketProvider } from 'y-websocket';
 export interface CollaborationConfig {
     wsUrl: string;
     roomName: string;
     microName: string;
+    useHocuspocus?: boolean;
 }
 export type CollaborationStatus = 'disconnected' | 'connecting' | 'connected';
 export interface UserInfo {
@@ -19,6 +21,39 @@ export interface CollaborationListItem {
     id: string;
     [key: string]: any;
 }
+interface ConnectionInfo {
+    id: string;
+    config: CollaborationConfig;
+    ydoc: Y.Doc;
+    provider: HocuspocusProvider | WebsocketProvider;
+    awareness: any;
+    status: CollaborationStatus;
+    isInitialized: boolean;
+    isDestroyed: boolean;
+    refCount: number;
+    lastUsed: number;
+}
+declare class GlobalCollaborationManager {
+    private connections;
+    private statusCallbacks;
+    private userCallbacks;
+    private cleanupInterval;
+    constructor();
+    private getConnectionId;
+    getConnection(config: CollaborationConfig): ConnectionInfo;
+    private createConnection;
+    private updateConnectionStatus;
+    releaseConnection(config: CollaborationConfig): void;
+    setUser(config: CollaborationConfig, userInfo: UserInfo): void;
+    onStatusChange(config: CollaborationConfig, callback: (status: CollaborationStatus) => void): () => void;
+    onUsersChange(config: CollaborationConfig, callback: () => void): () => void;
+    getOnlineUsers(config: CollaborationConfig): UserInfo[];
+    private startCleanupTask;
+    private cleanupInactiveConnections;
+    private destroyConnection;
+    destroyAll(): void;
+}
+export declare const globalCollaborationManager: GlobalCollaborationManager;
 export declare class CollaborationManager {
     private ydoc;
     private provider;
@@ -57,3 +92,4 @@ export declare class CollaborationManager {
     getSharedData(): Y.Map<any>;
     getListDataInstance(): Y.Array<any>;
 }
+export {};

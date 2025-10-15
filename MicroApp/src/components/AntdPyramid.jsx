@@ -22,6 +22,15 @@ const { Option } = Select;
 const AntdPyramid = (props) => {
   // 从 props 中获取协同相关的方法和数据
   const {
+    // 新的统一接口
+    collaborationService,
+    collaborationStatus,
+    onlineUsers,
+    blockContext,
+    microName,
+    wsUrl,
+    debugInfo,
+    // 金字塔特定数据（向后兼容）
     pyramidProvider,
     pyramidSharedData,
     pyramidList,
@@ -30,17 +39,17 @@ const AntdPyramid = (props) => {
     pyramidOnlineUsers,
     pyramidCollaborationStatus,
     updatePyramidData,
-    getPyramidData,
     addPyramidToList,
     updatePyramidInList,
     removePyramidFromList,
     setPyramidUser,
-    isCollaborationEnabled: propsCollaborationEnabled,
-    debugInfo
+    getRealTimeData,
+    getRealTimeListData,
+    isCollaborationEnabled: propsCollaborationEnabled
   } = props || {};
 
   // 检查是否启用了协同功能
-  const isCollaborationEnabled = !!pyramidProvider && !!pyramidSharedData;
+  const isCollaborationEnabled = !!(collaborationService || (pyramidProvider && pyramidSharedData));
 
   // 本地状态（当协同功能不可用时使用）
   const [localLevels, setLocalLevels] = useState(3);
@@ -63,6 +72,9 @@ const AntdPyramid = (props) => {
   const [selectedPyramidId, setSelectedPyramidId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  // 本地协同状态，用于UI显示
+  const [localCollaborationStatus, setLocalCollaborationStatus] = useState('disconnected');
 
   // API 基础URL
   const API_BASE_URL = 'http://localhost:3000/api';
@@ -70,13 +82,13 @@ const AntdPyramid = (props) => {
   // 协同数据同步
   useEffect(() => {
     if (isCollaborationEnabled) {
-      const currentLevels = getPyramidData('levels') || 3;
-      const currentLevelData = getPyramidData('levelData') || [
+      const currentLevels = blockContext?.sharedData?.getPyramidData('levels') || 3;
+      const currentLevelData = blockContext?.sharedData?.getPyramidData('levelData') || [
         { text: '顶层', color: '#ff6b6b' },
         { text: '中层', color: '#4ecdc4' },
         { text: '底层', color: '#45b7d1' }
       ];
-      const currentSelectedId = getPyramidData('selectedPyramidId') || '';
+      const currentSelectedId = blockContext?.sharedData?.getPyramidData('selectedPyramidId') || '';
 
       setLevels(currentLevels);
       setLevelData(currentLevelData);
@@ -88,7 +100,104 @@ const AntdPyramid = (props) => {
       setSelectedPyramidId(localSelectedPyramidId);
       setPyramids(localPyramids);
     }
-  }, [isCollaborationEnabled, pyramidData, pyramidListData, localLevels, localLevelData, localSelectedPyramidId, localPyramids]);
+  }, [isCollaborationEnabled, pyramidData, pyramidListData, localLevels, localLevelData, localSelectedPyramidId, localPyramids, blockContext]);
+
+  // 实时数据同步 - 使用实时数据获取方法
+  useEffect(() => {
+    if (isCollaborationEnabled && (blockContext?.sharedData || collaborationService)) {
+      console.log('🔍 设置实时数据同步');
+      
+      const syncData = () => {
+        // 优先使用SharedDataService，其次使用协同服务
+        const realTimeData = blockContext?.sharedData?.getRealTimeData() || 
+                           collaborationService?.getRealTimeData() || {};
+        const realTimeListData = blockContext?.sharedData?.getRealTimeListData() || 
+                               collaborationService?.getRealTimeListData() || [];
+        
+        console.log('📊 实时数据同步:', { realTimeData, realTimeListData });
+        
+        const currentLevels = realTimeData.levels || 3;
+        const currentLevelData = realTimeData.levelData || [
+          { text: '顶层', color: '#ff6b6b' },
+          { text: '中层', color: '#4ecdc4' },
+          { text: '底层', color: '#45b7d1' }
+        ];
+        const currentSelectedId = realTimeData.selectedPyramidId || '';
+
+        setLevels(currentLevels);
+        setLevelData(currentLevelData);
+        setSelectedPyramidId(currentSelectedId);
+        setPyramids(realTimeListData);
+        
+        // 检查协同状态，如果数据能正常获取，说明协同已连接
+        if (realTimeData && Object.keys(realTimeData).length > 0) {
+          if (localCollaborationStatus !== 'connected') {
+            console.log('✅ 通过数据同步检测到协同已连接');
+            setLocalCollaborationStatus('connected');
+          }
+        }
+      };
+
+      // 初始同步
+      syncData();
+
+      // 设置定时同步（作为备用方案）
+      const syncInterval = setInterval(syncData, 1000);
+
+      return () => {
+        console.log('🧹 清理实时数据同步');
+        clearInterval(syncInterval);
+      };
+    }
+  }, [isCollaborationEnabled, collaborationService, blockContext]);
+
+  // 监听协同数据变化并实时更新UI
+  useEffect(() => {
+    if (isCollaborationEnabled && pyramidSharedData) {
+      console.log('🔍 设置协同数据监听器');
+      
+      // 监听共享数据变化
+      const handleDataChange = () => {
+        console.log('📊 协同数据变化，更新UI');
+        const currentLevels = blockContext?.sharedData?.getPyramidData('levels') || 3;
+        const currentLevelData = blockContext?.sharedData?.getPyramidData('levelData') || [
+          { text: '顶层', color: '#ff6b6b' },
+          { text: '中层', color: '#4ecdc4' },
+          { text: '底层', color: '#45b7d1' }
+        ];
+        const currentSelectedId = blockContext?.sharedData?.getPyramidData('selectedPyramidId') || '';
+
+        setLevels(currentLevels);
+        setLevelData(currentLevelData);
+        setSelectedPyramidId(currentSelectedId);
+      };
+
+      // 监听列表数据变化
+      const handleListChange = () => {
+        console.log('📋 协同列表数据变化，更新UI');
+        setPyramids(pyramidListData || []);
+      };
+
+      // 直接监听Yjs数据结构的变化
+      if (pyramidSharedData.observe) {
+        pyramidSharedData.observe(handleDataChange);
+      }
+
+      if (pyramidList && pyramidList.observe) {
+        pyramidList.observe(handleListChange);
+      }
+
+      return () => {
+        console.log('🧹 清理协同数据监听器');
+        if (pyramidSharedData.unobserve) {
+          pyramidSharedData.unobserve(handleDataChange);
+        }
+        if (pyramidList && pyramidList.unobserve) {
+          pyramidList.unobserve(handleListChange);
+        }
+      };
+    }
+  }, [isCollaborationEnabled, pyramidSharedData, pyramidList, pyramidListData]);
 
   // 更新层数的协同方法
   const updateLevels = (newLevels) => {
@@ -101,8 +210,12 @@ const AntdPyramid = (props) => {
 
   // 更新层数据的协同方法
   const updateLevelData = (newLevelData) => {
-    if (isCollaborationEnabled && updatePyramidData) {
-      updatePyramidData('levelData', newLevelData);
+    if (isCollaborationEnabled) {
+      if (blockContext?.sharedData) {
+        blockContext.sharedData.updatePyramidData('levelData', newLevelData);
+      } else if (collaborationService) {
+        collaborationService.updateData('levelData', newLevelData);
+      }
     } else {
       setLocalLevelData(newLevelData);
     }
@@ -110,8 +223,12 @@ const AntdPyramid = (props) => {
 
   // 更新选中金字塔ID的协同方法
   const updateSelectedPyramidId = (newId) => {
-    if (isCollaborationEnabled && updatePyramidData) {
-      updatePyramidData('selectedPyramidId', newId);
+    if (isCollaborationEnabled) {
+      if (blockContext?.sharedData) {
+        blockContext.sharedData.updatePyramidData('selectedPyramidId', newId);
+      } else if (collaborationService) {
+        collaborationService.updateData('selectedPyramidId', newId);
+      }
     } else {
       setLocalSelectedPyramidId(newId);
     }
@@ -209,6 +326,35 @@ const AntdPyramid = (props) => {
       setLoading(false);
     }
   };
+
+  // 监听协同状态变化
+  useEffect(() => {
+    const currentStatus = collaborationStatus || pyramidCollaborationStatus || 'disconnected';
+    console.log('🔄 协同状态变化:', currentStatus);
+    setLocalCollaborationStatus(currentStatus);
+  }, [collaborationStatus, pyramidCollaborationStatus]);
+
+  // 初始协同状态检查
+  useEffect(() => {
+    if (isCollaborationEnabled) {
+      console.log('🔍 初始协同状态检查:', {
+        collaborationStatus,
+        pyramidCollaborationStatus,
+        isCollaborationEnabled,
+        hasCollaborationService: !!collaborationService,
+        hasProvider: !!pyramidProvider,
+        hasSharedData: !!pyramidSharedData,
+        microName,
+        wsUrl
+      });
+      
+      // 如果协同功能已启用，设置为连接中状态
+      if (blockContext?.sharedData || collaborationService || (pyramidProvider && pyramidSharedData)) {
+        setLocalCollaborationStatus('connecting');
+        console.log('🔄 设置初始状态为连接中');
+      }
+    }
+  }, [isCollaborationEnabled, blockContext, collaborationService, pyramidProvider, pyramidSharedData, microName, wsUrl]);
 
   // 组件挂载时获取金字塔列表
   useEffect(() => {
@@ -333,14 +479,14 @@ const AntdPyramid = (props) => {
                 width: '6px',
                 height: '6px',
                 borderRadius: '50%',
-                backgroundColor: pyramidCollaborationStatus === 'connected' ? '#52c41a' : 
-                                pyramidCollaborationStatus === 'connecting' ? '#faad14' : '#ff4d4f'
+                backgroundColor: localCollaborationStatus === 'connected' ? '#52c41a' : 
+                                localCollaborationStatus === 'connecting' ? '#faad14' : '#ff4d4f'
               }} />
               <Text type="secondary">
-                协同: {pyramidCollaborationStatus === 'connected' ? '已连接' : 
-                      pyramidCollaborationStatus === 'connecting' ? '连接中' : '已断开'}
-                {pyramidOnlineUsers && pyramidOnlineUsers.length > 0 && 
-                  ` (${pyramidOnlineUsers.length} 用户在线)`}
+                协同: {localCollaborationStatus === 'connected' ? '已连接' : 
+                      localCollaborationStatus === 'connecting' ? '连接中' : '已断开'}
+                {(onlineUsers || pyramidOnlineUsers) && (onlineUsers || pyramidOnlineUsers).length > 0 && 
+                  ` (${(onlineUsers || pyramidOnlineUsers).length} 用户在线)`}
               </Text>
             </Space>
           )}

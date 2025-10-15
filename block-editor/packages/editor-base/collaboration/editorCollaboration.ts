@@ -34,6 +34,8 @@ export class EditorCollaborationManager {
   private statusCallbacks: ((status: EditorCollaborationStatus) => void)[] = [];
   private userCallbacks: (() => void)[] = [];
   private isHocuspocus: boolean;
+  private _isInitialized: boolean = false;
+  private _isDestroyed: boolean = false;
 
   constructor(config: EditorCollaborationConfig) {
     this.config = config;
@@ -49,6 +51,7 @@ export class EditorCollaborationManager {
         name: `${config.microName}-${config.roomName}`,
         document: this.ydoc,
         onConnect: () => {
+          this._isInitialized = true;
           this.setStatus('connected');
           console.log(`✅ ${this.config.microName} 编辑器协同已连接`);
           console.log(`🔗 连接信息:`, {
@@ -57,15 +60,18 @@ export class EditorCollaborationManager {
             provider: 'HocuspocusProvider'
           });
         },
-        onDisconnect: () => {
+        onDisconnect: ({ event }: { event: any }) => {
           this.setStatus('disconnected');
-          console.log(`❌ ${this.config.microName} 编辑器协同已断开`);
+          console.log(`❌ ${this.config.microName} 编辑器协同已断开`, event);
         },
         onStatus: ({ status }: { status: any }) => {
           console.log(`${this.config.microName} 编辑器协同状态:`, status);
+          if (status === 'connecting') {
+            this.setStatus('connecting');
+          }
         },
-        onAuthenticationFailed: () => {
-          console.log(`❌ ${this.config.microName} 编辑器协同认证失败`);
+        onAuthenticationFailed: ({ reason }: { reason: any }) => {
+          console.log(`❌ ${this.config.microName} 编辑器协同认证失败:`, reason);
         }
       });
     } else {
@@ -74,11 +80,15 @@ export class EditorCollaborationManager {
       // 绑定WebsocketProvider事件
       this.provider.on('status', ({ status }: { status: any }) => {
         if (status === 'connected') {
+          this._isInitialized = true;
           this.setStatus('connected');
           console.log(`✅ ${this.config.microName} 编辑器协同已连接`);
         } else if (status === 'disconnected') {
           this.setStatus('disconnected');
           console.log(`❌ ${this.config.microName} 编辑器协同已断开`);
+        } else if (status === 'connecting') {
+          this.setStatus('connecting');
+          console.log(`🔄 ${this.config.microName} 编辑器协同连接中...`);
         } else {
           console.log(`${this.config.microName} 编辑器协同状态:`, status);
         }
@@ -166,8 +176,55 @@ export class EditorCollaborationManager {
 
   // 销毁协同
   destroy(): void {
-    this.provider.destroy();
-    this.ydoc.destroy();
+    if (this._isDestroyed) {
+      console.log(`⚠️ ${this.config.microName} 协同管理器已经被销毁，跳过重复销毁`);
+      return;
+    }
+
+    console.log(`🗑️ 开始销毁 ${this.config.microName} 协同管理器...`);
+    
+    // 检查是否已经初始化
+    if (!this._isInitialized) {
+      console.log(`⚠️ ${this.config.microName} 协同连接尚未完全建立，延迟销毁`);
+      // 延迟销毁，等待连接建立
+      setTimeout(() => {
+        if (!this._isDestroyed && this._isInitialized) {
+          this.performDestroy();
+        } else if (!this._isDestroyed) {
+          console.log(`⚠️ ${this.config.microName} 连接超时，强制销毁`);
+          this.performDestroy();
+        }
+      }, 5000); // 等待5秒
+      return;
+    }
+
+    this.performDestroy();
+  }
+
+  private performDestroy(): void {
+    if (this._isDestroyed) return;
+    
+    this._isDestroyed = true;
+    
+    try {
+      if (this.provider) {
+        this.provider.destroy();
+        console.log(`✅ ${this.config.microName} Provider 已销毁`);
+      }
+    } catch (error) {
+      console.error(`❌ 销毁 Provider 时出错:`, error);
+    }
+
+    try {
+      if (this.ydoc) {
+        this.ydoc.destroy();
+        console.log(`✅ ${this.config.microName} YDoc 已销毁`);
+      }
+    } catch (error) {
+      console.error(`❌ 销毁 YDoc 时出错:`, error);
+    }
+
+    console.log(`✅ ${this.config.microName} 协同管理器销毁完成`);
   }
 
   // 获取provider实例（用于传递给TipTap）
@@ -188,6 +245,16 @@ export class EditorCollaborationManager {
   // 检查是否使用Hocuspocus
   isUsingHocuspocus(): boolean {
     return this.isHocuspocus;
+  }
+
+  // 检查是否已初始化
+  isInitialized(): boolean {
+    return this._isInitialized;
+  }
+
+  // 检查是否已销毁
+  isDestroyed(): boolean {
+    return this._isDestroyed;
   }
 }
 
