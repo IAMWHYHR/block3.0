@@ -114,3 +114,6 @@ if (containerRef.current) {
 1. 添加了 `'micro-app'` 和 `'micro-app-2'` 配置
 2. 增强了容器创建和检查的调试信息
 3. 改进了错误处理和用户反馈
+
+
+

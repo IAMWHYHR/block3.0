@@ -172,3 +172,6 @@ if (microName === 'pyramid-app' && (!isCollaborationReady || !connectionRef.curr
 5. 控制台会显示详细的连接状态信息
 
 这样就彻底解决了协同状态参数传递的问题！
+
+
+

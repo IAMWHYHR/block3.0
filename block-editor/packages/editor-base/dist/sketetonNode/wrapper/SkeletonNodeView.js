@@ -315,7 +315,7 @@ const SkeletonNodeView = ({ node, editor, updateAttributes, deleteNode }) => {
         height: 100%;
         border: 1px solid #ddd;
         border-radius: 4px;
-        background: rgba(248, 249, 250, 0.9);
+        background: rgba(240, 248, 255, 0.9);
       `;
             // 清空并添加容器
             if (containerRef.current) {

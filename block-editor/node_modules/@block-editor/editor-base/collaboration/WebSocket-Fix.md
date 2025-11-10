@@ -241,3 +241,6 @@ setUser(config: CollaborationConfig, userInfo: UserInfo): void {
 3. 自动清理机制，防止连接泄漏
 4. 完善的错误处理和状态监控
 5. 向后兼容的API设计
+
+
+

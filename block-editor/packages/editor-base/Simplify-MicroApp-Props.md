@@ -281,3 +281,6 @@ sharedArray.subscribe((action, index, value) => {
 5. ✅ **维护性提升**：单一数据源，易于维护和扩展
 
 简化后的架构更加清晰，微应用只需要通过`blockContext.sharedData`就能访问所有协同功能，大大简化了接口复杂度！
+
+
+

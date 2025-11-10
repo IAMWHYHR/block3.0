@@ -393,3 +393,6 @@ const finalStatus = collaborationStatus || 'disconnected';
 5. ✅ **保持兼容性**：保留了必要的向后兼容props
 
 现在SimplePyramid组件更加简洁、独立，主要依赖`blockContext`接口，代码质量得到了进一步提升！
+
+
+

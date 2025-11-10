@@ -139,3 +139,6 @@ const server = new Server({
 
 ### 持久化存储
 在 `onStoreDocument` 和 `onLoadDocument` 中实现文档的持久化存储。
+
+
+

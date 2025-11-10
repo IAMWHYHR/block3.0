@@ -274,3 +274,6 @@ if (blockContext?.sharedData) {
 5. ✅ **保持功能完整**：所有核心功能都正常工作
 
 现在SimplePyramid组件的props接口更加简洁，只包含实际使用的变量，代码质量得到了进一步提升！
+
+
+

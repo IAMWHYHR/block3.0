@@ -34,12 +34,24 @@ export declare const editorStyles: {
     editorToolbar: {
         display: string;
         gap: string;
+        alignItems: string;
         padding: string;
         backgroundColor: string;
         border: string;
         borderRadius: string;
         marginBottom: string;
         flexWrap: "wrap";
+    };
+    toolbarGroup: {
+        display: string;
+        gap: string;
+        alignItems: string;
+    };
+    toolbarDivider: {
+        width: string;
+        height: string;
+        backgroundColor: string;
+        margin: string;
     };
     toolbarBtn: {
         padding: string;

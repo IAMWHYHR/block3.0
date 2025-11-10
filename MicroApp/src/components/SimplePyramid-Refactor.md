@@ -311,3 +311,6 @@ MicroApp/src/components/
 6. ✅ **易于维护**：代码结构更清晰，更易理解和维护
 
 新的SimplePyramid组件更加轻量、高效，完全满足微前端架构的需求！
+
+
+

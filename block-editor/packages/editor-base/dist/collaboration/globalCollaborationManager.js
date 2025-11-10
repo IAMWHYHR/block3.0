@@ -35,6 +35,14 @@ class GlobalCollaborationManager {
     // 创建新连接
     createConnection(config, connectionId) {
         const ydoc = new Y.Doc();
+        // 初始化主文档 MasterYdoc 的内部数据结构
+        // index: YMap <string(block_id), string(Fractional Index)>
+        const masterIndex = ydoc.getMap('index');
+        // data: YMap<string(block_id), string(childYdoc GUID)> - 存储子文档的 GUID，而不是 Y.Doc 对象
+        const masterData = ydoc.getMap('data');
+        console.log(`📋 初始化主文档 MasterYdoc: ${connectionId}`);
+        console.log(`  - index: YMap<string(block_id), string(Fractional Index)>`);
+        console.log(`  - data: YMap<string(block_id), string(childYdoc GUID)>`);
         const isHocuspocus = config.useHocuspocus !== false;
         let provider;
         let awareness;
@@ -253,6 +261,37 @@ class GlobalCollaborationManager {
     hasConnection(config) {
         const connectionId = this.getConnectionId(config);
         return this.connections.has(connectionId);
+    }
+    // 获取主文档的 index YMap (MasterYdoc.index)
+    // 返回: YMap <string(block_id), string(Fractional Index)>
+    getMasterIndex(config) {
+        const connectionId = this.getConnectionId(config);
+        const connection = this.connections.get(connectionId);
+        if (!connection) {
+            console.log(`⚠️ 尝试获取 index 但连接不存在: ${connectionId}`);
+            return null;
+        }
+        return connection.ydoc.getMap('index');
+    }
+    // 获取主文档的 data YMap (MasterYdoc.data)
+    // 返回: YMap<string(block_id), string(childYdoc GUID)> - 存储子文档的 GUID
+    getMasterData(config) {
+        const connectionId = this.getConnectionId(config);
+        const connection = this.connections.get(connectionId);
+        if (!connection) {
+            console.log(`⚠️ 尝试获取 data 但连接不存在: ${connectionId}`);
+            return null;
+        }
+        return connection.ydoc.getMap('data');
+    }
+    // 获取主文档的 ydoc
+    getMasterYdoc(config) {
+        const connectionId = this.getConnectionId(config);
+        const connection = this.connections.get(connectionId);
+        if (!connection) {
+            return null;
+        }
+        return connection.ydoc;
     }
     // 获取所有连接信息
     getAllConnections() {

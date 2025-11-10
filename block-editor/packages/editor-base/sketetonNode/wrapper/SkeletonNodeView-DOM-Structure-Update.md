@@ -368,3 +368,6 @@
 5. ✅ **视觉提升**：更现代的UI设计
 
 现在block-editor中的SkeletonNodeView具有与MainApp3相同的简洁、现代的设计风格，同时保持了所有核心功能！🎉
+
+
+

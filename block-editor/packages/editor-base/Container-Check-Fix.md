@@ -283,3 +283,6 @@ if (computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
 5. ✅ **时序问题解决**：确保检查时DOM状态是最新的
 
 修复后的容器检查机制更加可靠，能够准确识别容器状态，避免因时序问题导致的加载失败！
+
+
+

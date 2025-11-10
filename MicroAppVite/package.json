@@ -1,0 +1,37 @@
+{
+  "name": "micro-app-vite",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:lib": "cross-env BUILD_MODE=lib vite build",
+    "build:app": "cross-env BUILD_MODE=app vite build",
+    "preview": "npm run build:lib && cross-env VITE_PREVIEW_MODE=lib vite preview --port 7200",
+    "preview:app": "npm run build:app && vite preview --port 7200",
+    "start": "vite"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^6.1.0",
+    "@tiptap/extension-code": "^3.7.0",
+    "@tiptap/extension-code-block": "^3.7.0",
+    "@tiptap/extension-link": "^3.7.0",
+    "@tiptap/extension-placeholder": "^3.7.0",
+    "@tiptap/extension-strike": "^3.7.0",
+    "@tiptap/extension-underline": "^3.7.0",
+    "antd": "^5.27.5",
+    "kill-port": "^2.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "shared-sdk": "file:../SharedSDK"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "cross-env": "^7.0.3",
+    "vite": "^5.4.10"
+  }
+}
+

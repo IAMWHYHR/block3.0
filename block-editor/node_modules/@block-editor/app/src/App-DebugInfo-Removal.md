@@ -270,3 +270,6 @@ const handleInsertSkeletonNode = () => { editorInstance.insertSkeletonNode(); };
 5. ✅ **用户体验**：自动配置，无需用户手动操作
 
 现在`block-editor/app`的界面非常简洁，只显示"Block Editor 演示应用"标题，所有调试信息都已移除，同时保持了完整的编辑器功能！🎉
+
+
+

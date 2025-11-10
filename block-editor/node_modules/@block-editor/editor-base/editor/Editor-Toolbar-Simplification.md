@@ -313,3 +313,6 @@ style={mergeStyles(editorStyles.microAppBtn, editorStyles.microAppBtnPyramid)}
 5. ✅ **功能完整**：保留了所有核心功能
 
 现在Editor的工具栏非常简洁，只有一个"📊 插入金字塔"按钮，用户可以快速插入金字塔微应用，界面更加专注和易用！🎉
+
+
+

@@ -252,3 +252,6 @@ interface SimplePyramidProps {
 5. ✅ **维护性提升**：代码更清晰，接口更简洁
 
 现在SimplePyramid组件的props接口非常简洁，只包含实际使用的6个参数，完全依赖blockContext进行协同功能，代码质量达到了最优状态！
+
+
+

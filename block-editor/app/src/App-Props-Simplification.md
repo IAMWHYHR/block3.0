@@ -346,3 +346,6 @@ setEditorInstance(editor);
 5. ✅ **默认配置**：充分利用了组件的默认配置
 
 现在`block-editor/app`的ReactEditor配置非常简洁，只传递必要的参数，同时保持了完整的编辑器功能！🎉
+
+
+

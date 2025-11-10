@@ -266,3 +266,6 @@ blockContext?.sharedData?.getRealTimeListData()
 4. ✅ **内存安全**：正确管理监听器的生命周期
 
 修复后的代码更加健壮、统一，并且遵循了最佳实践！
+
+
+

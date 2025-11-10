@@ -37,12 +37,26 @@ export const editorStyles = {
     editorToolbar: {
         display: 'flex',
         gap: '8px',
+        alignItems: 'center',
         padding: '12px',
         backgroundColor: '#f8f9fa',
         border: '1px solid #dee2e6',
         borderRadius: '4px',
         marginBottom: '16px',
         flexWrap: 'wrap',
+    },
+    // 工具栏分组
+    toolbarGroup: {
+        display: 'flex',
+        gap: '4px',
+        alignItems: 'center',
+    },
+    // 工具栏分隔线
+    toolbarDivider: {
+        width: '1px',
+        height: '24px',
+        backgroundColor: '#dee2e6',
+        margin: '0 4px',
     },
     // 基本按钮样式
     toolbarBtn: {

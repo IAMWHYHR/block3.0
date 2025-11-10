@@ -197,3 +197,6 @@ if (realTimeData && Object.keys(realTimeData).length > 0) {
 5. 多用户协同功能正常工作
 
 这样就彻底解决了微应用侧协同状态显示的问题！
+
+
+

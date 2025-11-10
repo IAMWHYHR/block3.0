@@ -234,3 +234,6 @@ if (microName === 'pyramid-app' && !connectionRef.current) {
 5. 控制台会显示详细的连接状态信息
 
 这样就彻底解决了协同连接准备就绪的问题，确保微应用能够正常加载！
+
+
+

@@ -1,0 +1,10 @@
+{
+  "type": "module",
+  "name": "clouddocs-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hocuspocus collaboration server for CloudDocs"
+}
+
+
+

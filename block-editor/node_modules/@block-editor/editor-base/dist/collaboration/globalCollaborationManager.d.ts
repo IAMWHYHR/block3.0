@@ -33,6 +33,9 @@ declare class GlobalCollaborationManager {
     private destroyConnection;
     getConnectionStatus(config: EditorCollaborationConfig): EditorCollaborationStatus;
     hasConnection(config: EditorCollaborationConfig): boolean;
+    getMasterIndex(config: EditorCollaborationConfig): Y.Map<string> | null;
+    getMasterData(config: EditorCollaborationConfig): Y.Map<string> | null;
+    getMasterYdoc(config: EditorCollaborationConfig): Y.Doc | null;
     getAllConnections(): ConnectionInfo[];
     destroyAll(): void;
 }

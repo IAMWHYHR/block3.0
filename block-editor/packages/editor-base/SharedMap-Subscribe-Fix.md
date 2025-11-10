@@ -254,3 +254,6 @@ getArray(name: string): any {
 5. ✅ **代码结构优化**：统一了缩进和格式，移除了重复代码
 
 修复后的代码更加稳定可靠，微应用可以正常使用SharedMap和SharedArray的subscribe功能，容器检查也更加准确及时！
+
+
+
