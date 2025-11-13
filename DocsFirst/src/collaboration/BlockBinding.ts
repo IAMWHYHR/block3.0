@@ -1,7 +1,7 @@
 import * as Y from 'yjs'
 import * as PModel from 'prosemirror-model'
 import { EditorView } from 'prosemirror-view'
-import { updateYFragment } from '../y-prosemirror/index.js'
+import { updateYFragment } from '../y-prosemirror'
 
 /**
  * Binding between a child Y.Doc's YXmlFragment and a ProseMirror block node

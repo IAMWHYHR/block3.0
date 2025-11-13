@@ -1,6 +1,8 @@
 import { Extension } from '@tiptap/core'
-import { DecorationAttrs } from '@tiptap/pm/view'
+import type { DecorationAttrs } from '@tiptap/pm/view'
 import * as YPM from '../y-prosemirror'
+
+const { defaultSelectionBuilder } = YPM
 
 type CollaborationCursorStorage = {
   users: { clientId: number, [key: string]: any }[],
@@ -61,7 +63,7 @@ export const CollaborationCursor = Extension.create<CollaborationCursorOptions, 
 
         return cursor
       },
-      selectionRender: defaultSelectionBuilder,
+      selectionRender: defaultSelectionBuilder as any,
       onUpdate: defaultOnUpdate,
     }
   },
@@ -72,6 +74,9 @@ export const CollaborationCursor = Extension.create<CollaborationCursorOptions, 
     }
     if (!this.options.provider) {
       throw new Error('The "provider" option is required for the CollaborationCursor extension')
+    }
+    if (!this.options.provider.awareness) {
+      throw new Error('The provider must have an awareness instance for the CollaborationCursor extension')
     }
   },
 
@@ -86,7 +91,9 @@ export const CollaborationCursor = Extension.create<CollaborationCursorOptions, 
       updateUser: attributes => () => {
         this.options.user = attributes
 
-        this.options.provider.awareness.setLocalStateField('user', this.options.user)
+        if (this.options.provider.awareness) {
+          this.options.provider.awareness.setLocalStateField('user', this.options.user)
+        }
 
         return true
       },
@@ -99,18 +106,23 @@ export const CollaborationCursor = Extension.create<CollaborationCursorOptions, 
   },
 
   addProseMirrorPlugins() {
+    if (!this.options.provider.awareness) {
+      return []
+    }
+
     return [
       (YPM as any).yCursorPlugin(
         (() => {
-          this.options.provider.awareness.setLocalStateField('user', this.options.user)
+          const awareness = this.options.provider.awareness!
+          awareness.setLocalStateField('user', this.options.user)
 
-          this.storage.users = awarenessStatesToArray(this.options.provider.awareness.states)
+          this.storage.users = awarenessStatesToArray(awareness.getStates())
 
-          this.options.provider.awareness.on('update', () => {
-            this.storage.users = awarenessStatesToArray(this.options.provider.awareness.states)
+          awareness.on('update', () => {
+            this.storage.users = awarenessStatesToArray(awareness.getStates())
           })
 
-          return this.options.provider.awareness
+          return awareness
         })(),
         // @ts-ignore
         {

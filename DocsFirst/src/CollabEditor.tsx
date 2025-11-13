@@ -33,19 +33,73 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 
 	// State to track when master doc is synced
 	const [isSynced, setIsSynced] = useState(false)
+	const [connectionStatus, setConnectionStatus] = useState<string>('connecting')
 
 	// Wait for master doc to sync
 	useEffect(() => {
 		const handleSynced = () => {
+			console.log('✅ 文档已同步')
 			setIsSynced(true)
+			setConnectionStatus('connected')
+		}
+
+		const handleStatus = (data: any) => {
+			console.log('连接状态变化:', data.status)
+			setConnectionStatus(data.status)
+			// 如果连接成功，检查同步状态
+			if (data.status === 'connected' || data.status === 'Connecting') {
+				// 检查 provider 的同步状态
+				if (provider.isSynced) {
+					setIsSynced(true)
+				}
+			}
+		}
+
+		const handleConnect = () => {
+			console.log('✅ 已连接到服务器')
+			setConnectionStatus('connected')
+			// 连接成功后，检查同步状态
+			if (provider.isSynced) {
+				setIsSynced(true)
+			}
+		}
+
+		const handleDisconnect = () => {
+			console.log('❌ 与服务器断开连接')
+			setConnectionStatus('disconnected')
+			setIsSynced(false)
+		}
+
+		const handleClose = () => {
+			console.log('⚠️  连接已关闭')
+			setConnectionStatus('closed')
+			setIsSynced(false)
 		}
 
 		provider.on('synced', handleSynced)
+		provider.on('status', handleStatus)
+		provider.on('connect', handleConnect)
+		provider.on('disconnect', handleDisconnect)
+		provider.on('close', handleClose)
+
+		// 定期检查同步状态（作为备用方案）
+		const checkSyncInterval = setInterval(() => {
+			if (provider.isSynced && !isSynced) {
+				console.log('检测到文档已同步（通过轮询）')
+				setIsSynced(true)
+				setConnectionStatus('connected')
+			}
+		}, 1000)
 
 		return () => {
+			clearInterval(checkSyncInterval)
 			provider.off('synced', handleSynced)
+			provider.off('status', handleStatus)
+			provider.off('connect', handleConnect)
+			provider.off('disconnect', handleDisconnect)
+			provider.off('close', handleClose)
 		}
-	}, [provider])
+	}, [provider, isSynced])
 
 	// Create editor and binding
 	const editor = useEditor({
@@ -62,14 +116,35 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 			}),
 		],
 		content: '',
-		editable: isSynced, // Only enable editor after sync
+		editable: false, // Will be enabled after connection/sync
 	})
+
+	// Update editor editable state when connection/sync status changes
+	useEffect(() => {
+		if (editor) {
+			const shouldBeEditable = isSynced || connectionStatus === 'connected'
+			if (editor.isEditable !== shouldBeEditable) {
+				editor.setEditable(shouldBeEditable)
+				console.log('编辑器可编辑状态已更新:', shouldBeEditable)
+			}
+		}
+	}, [editor, isSynced, connectionStatus])
 
 	// Create master document binding
 	const binding = useMemo(() => {
-		if (!editor || !isSynced) return null
-		return new MasterDocumentBinding(masterYdoc, editor)
-	}, [editor, masterYdoc, isSynced])
+		if (!editor) return null
+		// Create binding when editor is ready and connected
+		// Note: MasterDocumentBinding might need sync, but we'll create it when connected
+		if (isSynced || connectionStatus === 'connected') {
+			try {
+				return new MasterDocumentBinding(masterYdoc, editor)
+			} catch (error) {
+				console.error('创建 MasterDocumentBinding 失败:', error)
+				return null
+			}
+		}
+		return null
+	}, [editor, masterYdoc, isSynced, connectionStatus])
 
 	// Handle batch sync step
 	useEffect(() => {
@@ -107,17 +182,39 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 		}
 	}, [editor, provider, masterYdoc, binding])
 
+	const statusColors: Record<string, string> = {
+		connected: '#10b981',
+		connecting: '#f59e0b',
+		disconnected: '#ef4444',
+		closed: '#6b7280',
+	}
+
 	return (
-		<div
-			style={{
-				border: '1px solid #e5e7eb',
-				borderRadius: 8,
-				padding: 16,
-				minHeight: 240,
-				background: '#fff',
-			}}
-		>
-			<EditorContent editor={editor} />
+		<div>
+			<div style={{ marginBottom: 8, fontSize: 12, color: '#666' }}>
+				连接状态: 
+				<span style={{ 
+					color: statusColors[connectionStatus] || '#666',
+					fontWeight: 'bold',
+					marginLeft: 4
+				}}>
+					{connectionStatus === 'connected' ? '✅ 已连接' :
+					 connectionStatus === 'connecting' ? '🔄 连接中...' :
+					 connectionStatus === 'disconnected' ? '❌ 已断开' :
+					 '⚠️  已关闭'}
+				</span>
+			</div>
+			<div
+				style={{
+					border: '1px solid #e5e7eb',
+					borderRadius: 8,
+					padding: 16,
+					minHeight: 240,
+					background: '#fff',
+				}}
+			>
+				<EditorContent editor={editor} />
+			</div>
 		</div>
 	)
 }

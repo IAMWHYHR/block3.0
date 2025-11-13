@@ -231,11 +231,20 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
 	attachWebSocketListeners(ws: HocusPocusWebSocket, reject: Function) {
 		const { identifier } = ws
 		const onMessageHandler = (payload: any) => this.emit("message", payload)
-		const onCloseHandler = (payload: any) =>
+		const onCloseHandler = (payload: any) => {
+			// Log close event for debugging
+			if (ws.readyState === WsReadyStates.Connecting || ws.readyState === WsReadyStates.Open) {
+				console.warn('WebSocket closed unexpectedly:', payload)
+			}
 			this.emit("close", { event: payload })
+		}
 		const onOpenHandler = (payload: any) => this.emit("open", payload)
 		const onErrorHandler = (err: any) => {
-			reject(err)
+			console.error('WebSocket error in handler:', err)
+			// Only reject if connection hasn't been established
+			if (ws.readyState !== WsReadyStates.Open) {
+				reject(err)
+			}
 		}
 
 		this.webSocketHandlers[identifier] = {
@@ -276,20 +285,62 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
 			this.lastMessageReceived = 0
 			this.identifier += 1
 
-			const ws = new this.configuration.WebSocketPolyfill(this.url)
-			ws.binaryType = "arraybuffer"
-			ws.identifier = this.identifier
+			try {
+				let wsUrl = this.url
+				// 确保 URL 没有末尾斜杠
+				wsUrl = wsUrl.replace(/\/+$/, '')
+				console.log('🔌 正在连接到 WebSocket:', wsUrl)
+				
+				const ws = new this.configuration.WebSocketPolyfill(wsUrl)
+				ws.binaryType = "arraybuffer"
+				ws.identifier = this.identifier
 
-			this.attachWebSocketListeners(ws, reject)
+				// Add error handler for connection errors
+				ws.addEventListener('error', (error) => {
+					console.error('❌ WebSocket 连接错误')
+					console.error('   连接 URL:', wsUrl)
+					console.error('   WebSocket 状态:', ws.readyState)
+					console.error('   错误详情:', error)
+					
+					// 如果连接立即失败，可能需要检查服务器
+					if (ws.readyState === WsReadyStates.Closed || ws.readyState === 3) {
+						console.error('   ⚠️  连接在建立之前就关闭了')
+						console.error('   💡 请检查:')
+						console.error('      1. 服务器是否正在运行 (npm run server)')
+						console.error('      2. 端口 1234 是否被占用')
+						console.error('      3. 防火墙是否阻止了连接')
+						console.error('      4. 服务器日志中是否有错误信息')
+					}
+					// Don't reject immediately, let the retry mechanism handle it
+				})
 
-			this.webSocket = ws
+				ws.addEventListener('open', () => {
+					console.log('✅ WebSocket 连接已建立:', wsUrl)
+				})
 
-			this.status = WebSocketStatus.Connecting
-			this.emit("status", { status: WebSocketStatus.Connecting })
+				ws.addEventListener('close', (event) => {
+					console.warn('⚠️  WebSocket 连接已关闭:', {
+						code: event.code,
+						reason: event.reason,
+						wasClean: event.wasClean,
+						url: wsUrl
+					})
+				})
 
-			this.connectionAttempt = {
-				resolve,
-				reject,
+				this.attachWebSocketListeners(ws, reject)
+
+				this.webSocket = ws
+
+				this.status = WebSocketStatus.Connecting
+				this.emit("status", { status: WebSocketStatus.Connecting })
+
+				this.connectionAttempt = {
+					resolve,
+					reject,
+				}
+			} catch (error) {
+				console.error('Failed to create WebSocket connection:', error)
+				reject(error)
 			}
 		})
 	}
@@ -362,11 +413,12 @@ export class HocuspocusProviderWebsocket extends EventEmitter {
 	}
 
 	get serverUrl() {
-		while (this.configuration.url[this.configuration.url.length - 1] === "/") {
-			return this.configuration.url.slice(0, this.configuration.url.length - 1)
+		let url = this.configuration.url
+		// Remove trailing slashes
+		while (url.length > 0 && url[url.length - 1] === "/") {
+			url = url.slice(0, url.length - 1)
 		}
-
-		return this.configuration.url
+		return url
 	}
 
 	get url() {

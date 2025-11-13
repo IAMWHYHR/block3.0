@@ -12,6 +12,7 @@ export const undo: any = (impl as any).undo
 export const yXmlFragmentToProsemirrorJSON: any = (impl as any).yXmlFragmentToProsemirrorJSON
 export const yCursorPlugin: any = (impl as any).yCursorPlugin
 export const defaultSelectionBuilder: any = (impl as any).defaultSelectionBuilder
+export const updateYFragment: any = (impl as any).updateYFragment
 
 
 

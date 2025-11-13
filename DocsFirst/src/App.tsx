@@ -7,11 +7,11 @@ export default function App() {
 		<div style={{ maxWidth: 800, margin: '40px auto', padding: '0 16px' }}>
 			<h1>DocsFirst - Collaborative Editor</h1>
 			<p style={{ color: '#666' }}>
-				Connected to the Y-WebSocket demo server. Open this page in another browser to collaborate.
+				Connecting to Hocuspocus server. If connection fails, you may need to run a local Hocuspocus server.
 			</p>
 			<CollabEditor
 				roomName={useMemo(() => 'docsfirst-demo-room', [])}
-				host="wss://demos.yjs.dev"
+				host="ws://localhost:1234"
 				userName="User"
 			/>
 		</div>

@@ -1,5 +1,5 @@
 import * as Y from 'yjs'
-import { Editor, EditorState } from '@tiptap/core'
+import { Editor } from '@tiptap/core'
 import { BlockBinding } from './BlockBinding.js'
 import { EditorView } from 'prosemirror-view'
 

@@ -45,11 +45,14 @@ export const createDecorations = (
   createSelection
 ) => {
   const ystate = ySyncPluginKey.getState(state)
+  if (!ystate || !ystate.doc) {
+    return DecorationSet.create(state.doc, [])
+  }
   const y = ystate.doc
   const decorations = []
   if (
     ystate.snapshot != null || ystate.prevSnapshot != null ||
-    ystate.binding.mapping.size === 0
+    (ystate.binding && ystate.binding.mapping && ystate.binding.mapping.size === 0)
   ) {
     return DecorationSet.create(state.doc, [])
   }
@@ -158,6 +161,9 @@ export const yCursorPlugin = (
       }
       const updateCursorInfo = () => {
         const ystate = ySyncPluginKey.getState(view.state)
+        if (!ystate || !ystate.doc || !ystate.type || !ystate.binding) {
+          return
+        }
         const current = awareness.getLocalState() || {}
         if (view.hasFocus()) {
           const selection = getSelection(view.state)
