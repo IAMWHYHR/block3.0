@@ -16,7 +16,7 @@ export class MasterDocumentBinding {
 	public readonly editorView: EditorView
 	private readonly indexMap: Y.Map<number>
 	private readonly dataMap: Y.Map<Y.Doc>
-	private readonly blockBindings: Map<string, BlockBinding> = new Map()
+	public readonly blockBindings: Map<string, BlockBinding> = new Map()
 	private readonly _observeFunction: (events: Y.YEvent<any>[], transaction: Y.Transaction) => void
 	private isDestroyed = false
 
@@ -83,23 +83,36 @@ export class MasterDocumentBinding {
 	private _createBlockFromMaster(blockId: string) {
 		if (this.isDestroyed) return
 
+		console.log(`🔄 _createBlockFromMaster called for blockId: ${blockId}`)
+
 		const childYdoc = this.dataMap.get(blockId)
 		if (!childYdoc) {
 			// Child doc doesn't exist yet, create placeholder
+			console.log(`⚠️ ChildYdoc not found for blockId: ${blockId}, creating placeholder`)
 			this._createPlaceholderBlock(blockId)
 			return
 		}
 
+		console.log(`✅ Found childYdoc for blockId: ${blockId}`)
+
 		// Create placeholder block node
 		const placeholderNode = this._createPlaceholderBlock(blockId)
+		if (!placeholderNode) {
+			console.error(`❌ Failed to create placeholder block for blockId: ${blockId}`)
+			return
+		}
+
+		console.log(`✅ Created placeholder block node with uuid: ${placeholderNode.attrs?.uuid}`)
 
 		// Load child doc if not loaded
 		if (!childYdoc.isLoaded) {
 			childYdoc.load()
 		}
 
-		// Create binding
-		this._createBlockBinding(blockId, childYdoc, placeholderNode)
+		// Create binding with sync from fragment (master -> editor)
+		// When master doc has new childYdoc but editor doesn't have the node,
+		// we need to sync YXmlFragment content to the editor node
+		this._createBlockBinding(blockId, childYdoc, placeholderNode, true)
 	}
 
 	/**
@@ -131,29 +144,71 @@ export class MasterDocumentBinding {
 
 	/**
 	 * Create binding between child doc and block node
+	 * @param shouldSyncFromFragment - If true, sync YXmlFragment to block node (master -> editor)
+	 *                                  If false, skip sync (editor -> master, editor node is already latest)
 	 */
-	private _createBlockBinding(blockId: string, childYdoc: Y.Doc, blockNode: any) {
+	private _createBlockBinding(
+		blockId: string,
+		childYdoc: Y.Doc,
+		blockNode: any,
+		shouldSyncFromFragment: boolean = true,
+	) {
 		if (this.isDestroyed) return
 		if (this.blockBindings.has(blockId)) {
 			// Binding already exists
+			console.log(`⚠️ BlockBinding already exists for blockId: ${blockId}`)
 			return
 		}
 
-		// Find the actual block node in the document
+		// First, try to use the provided blockNode if it has the correct uuid
 		let actualBlockNode: any = null
-		this._traverseEditorDoc((node) => {
-			if (node.attrs && node.attrs.uuid === blockId) {
-				actualBlockNode = node
-			}
-		})
+		if (blockNode && blockNode.attrs && blockNode.attrs.uuid === blockId) {
+			// Verify the node exists in the document by finding it
+			this._traverseEditorDoc((node) => {
+				if (node.attrs && node.attrs.uuid === blockId) {
+					actualBlockNode = node
+				}
+			})
+		}
+
+		// If not found, search for it in the document
+		if (!actualBlockNode) {
+			this._traverseEditorDoc((node) => {
+				if (node.attrs && node.attrs.uuid === blockId) {
+					actualBlockNode = node
+				}
+			})
+		}
 
 		if (!actualBlockNode) {
-			console.error(`Block node with uuid ${blockId} not found`)
+			console.error(`❌ Block node with uuid ${blockId} not found in editor`)
+			console.log('Available block nodes in editor:')
+			this._traverseEditorDoc((node) => {
+				if (node.attrs && node.attrs.uuid) {
+					console.log(`  - uuid: ${node.attrs.uuid}, type: ${node.type.name}`)
+				}
+			})
+			console.log('Available block IDs in masterYdoc:', Array.from(this.indexMap.keys()))
+			console.log('Available childYdocs in masterYdoc:', Array.from(this.dataMap.keys()))
 			return
 		}
 
-		const binding = new BlockBinding(childYdoc, actualBlockNode, this.editorView)
+		const binding = new BlockBinding(
+			childYdoc,
+			actualBlockNode,
+			this.editorView,
+			shouldSyncFromFragment,
+		)
 		this.blockBindings.set(blockId, binding)
+		console.log(`✅ Created BlockBinding for blockId: ${blockId}, total bindings: ${this.blockBindings.size}`)
+		console.log(`🔍 blockBindings Map reference:`, this.blockBindings)
+		console.log(`🔍 blockBindings entries:`, Array.from(this.blockBindings.entries()))
+		
+		// Force update window reference to ensure it's always current
+		if ((window as any).collabEditor) {
+			;(window as any).collabEditor.masterYdocBinding = this
+			console.log(`✅ Updated window.collabEditor.masterYdocBinding reference`)
+		}
 	}
 
 	/**
@@ -227,11 +282,17 @@ export class MasterDocumentBinding {
 		const childYdoc = new Y.Doc({ guid: blockId })
 		const fragment = childYdoc.getXmlFragment('default')
 
-		// Initialize fragment from block node content
+		// Initialize fragment: create a single top-level YXmlElement
 		const meta = { mapping: new Map(), isOMark: new Map() }
 		childYdoc.transact(() => {
-			// Convert block node to YXmlFragment
-			this._prosemirrorNodeToYXmlFragment(blockNode, fragment, meta)
+			// Create YXmlElement with blockNode.type.name as nodeName
+			const xmlElement = new Y.XmlElement(blockNode.type.name)
+			
+			// Convert block node attributes and children to YXmlElement
+			this._prosemirrorNodeToYXmlFragment(blockNode, xmlElement, meta)
+			
+			// Insert the YXmlElement into fragment (ensuring only one top-level element)
+			fragment.insert(0, [xmlElement])
 		}, this)
 
 		// Add to master document
@@ -242,8 +303,10 @@ export class MasterDocumentBinding {
 			childYdoc.load()
 		}, this)
 
-		// Create binding
-		this._createBlockBinding(blockId, childYdoc, blockNode)
+		// Create binding without sync from fragment (editor -> master)
+		// When editor has new node but master doc doesn't have it,
+		// editor node is already the latest, so no need to sync from fragment
+		this._createBlockBinding(blockId, childYdoc, blockNode, false)
 	}
 
 	/**
@@ -279,7 +342,7 @@ export class MasterDocumentBinding {
 		const binding = this.blockBindings.get(blockId)
 		if (!binding) return
 
-		// Find the block node
+		// Find the updated block node
 		let blockNode: any = null
 		this._traverseEditorDoc((node) => {
 			if (node.attrs && node.attrs.uuid === blockId) {
@@ -289,8 +352,9 @@ export class MasterDocumentBinding {
 
 		if (!blockNode) return
 
-		// Update YXmlFragment from block node
-		binding.updateYXmlFragment()
+		// Update YXmlFragment from the new block node
+		// Pass the new blockNode to ensure we use the latest node reference
+		binding.updateYXmlFragment(blockNode)
 	}
 
 	/**
@@ -316,33 +380,65 @@ export class MasterDocumentBinding {
 	}
 
 	/**
-	 * Convert ProseMirror node to YXmlFragment
-	 * Simplified version
+	 * Convert ProseMirror node to YXmlElement
+	 * Updates the YXmlElement with node attributes and children
 	 */
 	private _prosemirrorNodeToYXmlFragment(
 		node: any,
-		fragment: Y.XmlFragment,
+		xmlElement: Y.XmlElement,
 		meta: { mapping: Map<any, any>; isOMark: Map<any, any> },
 	) {
-		// This is a simplified version
-		// In production, you should use the full y-prosemirror conversion logic
-		if (node.isText) {
-			const text = new Y.XmlText()
-			text.insert(0, node.text)
-			fragment.insert(0, [text])
-		} else {
-			const element = new Y.XmlElement(node.type.name)
-			for (const key in node.attrs) {
-				if (node.attrs[key] !== null) {
-					element.setAttribute(key, node.attrs[key])
-				}
+		// Update YXmlElement attributes from node attributes
+		for (const key in node.attrs) {
+			if (node.attrs[key] !== null && node.attrs[key] !== undefined) {
+				xmlElement.setAttribute(key, String(node.attrs[key]))
 			}
+		}
+
+		// Clear existing content to ensure clean update
+		xmlElement.delete(0, xmlElement.length)
+
+		// Process children (block nodes should have children, not be text nodes)
+		if (node.isText) {
+			// This branch should not be reached for block nodes,
+			// but kept for robustness when processing inline text nodes
+			const text = new Y.XmlText()
+			if (node.text) {
+				text.insert(0, node.text)
+			}
+			// Apply marks as formatting attributes on the text
+			if (node.marks && node.marks.length > 0) {
+				node.marks.forEach((mark: any) => {
+					const markAttrs = mark.attrs || {}
+					text.format(0, text.length, { [mark.type.name]: markAttrs })
+				})
+			}
+			xmlElement.insert(0, [text])
+		} else {
+			// For block/inline nodes, recursively process children
 			node.forEach((child: any) => {
-				const childFragment = new Y.XmlFragment()
-				this._prosemirrorNodeToYXmlFragment(child, childFragment, meta)
-				element.insert(element.length, [childFragment])
+				if (child.isText) {
+					// Handle text child nodes
+					const text = new Y.XmlText()
+					if (child.text) {
+						text.insert(0, child.text)
+					}
+					// Apply marks as formatting attributes
+					if (child.marks && child.marks.length > 0) {
+						child.marks.forEach((mark: any) => {
+							const markAttrs = mark.attrs || {}
+							text.format(0, text.length, { [mark.type.name]: markAttrs })
+						})
+					}
+					xmlElement.insert(xmlElement.length, [text])
+				} else {
+					// Handle block/inline child nodes
+					const childElement = new Y.XmlElement(child.type.name)
+					// Recursively process child node to update its attributes and children
+					this._prosemirrorNodeToYXmlFragment(child, childElement, meta)
+					xmlElement.insert(xmlElement.length, [childElement])
+				}
 			})
-			fragment.insert(fragment.length, [element])
 		}
 	}
 

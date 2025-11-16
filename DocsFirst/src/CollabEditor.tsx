@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { CollaborationCursor } from './collaboration/collaboration-cursor'
+import { UuidExtension } from './extensions/UuidExtension'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from './hocuspocus/provider'
 import { MasterDocumentBinding } from './collaboration/MasterDocumentBinding'
@@ -107,6 +108,7 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 			StarterKit.configure({
 				history: false, // history is handled by yjs
 			}),
+			UuidExtension,
 			CollaborationCursor.configure({
 				provider: provider,
 				user: {
@@ -146,7 +148,10 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 		return null
 	}, [editor, masterYdoc, isSynced, connectionStatus])
 
-	// Handle batch sync step
+	// Handle batch sync step (if supported by custom server)
+	// Note: Standard Hocuspocus server doesn't support BatchSyncStep messages.
+	// Subdocs are automatically synced through the main document's Y.Map.
+	// This handler is kept for potential future use with custom servers.
 	useEffect(() => {
 		if (!provider || !binding) return
 
@@ -173,14 +178,36 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 		}
 	}, [provider, binding])
 
+	// Mount objects to window for debugging
 	useEffect(() => {
-		return () => {
-			binding?.destroy()
-			provider.destroy()
-			masterYdoc.destroy()
-			editor?.destroy()
+		// Initialize or update window.collabEditor
+		if (!(window as any).collabEditor) {
+			;(window as any).collabEditor = {}
 		}
-	}, [editor, provider, masterYdoc, binding])
+
+		// Always update references to ensure we have the latest instances
+		;(window as any).collabEditor.provider = provider
+		;(window as any).collabEditor.masterYdoc = masterYdoc
+		;(window as any).collabEditor.editor = editor
+		;(window as any).collabEditor.masterYdocBinding = binding
+
+		if (binding) {
+			console.log('🔧 调试对象已更新到 window.collabEditor:')
+			console.log('  - window.collabEditor.provider (HocuspocusProvider)')
+			console.log('  - window.collabEditor.masterYdoc (Y.Doc)')
+			console.log('  - window.collabEditor.editor (Tiptap Editor)')
+			console.log('  - window.collabEditor.masterYdocBinding (MasterDocumentBinding)')
+			console.log(`  - blockBindings size: ${binding.blockBindings.size}`)
+		}
+
+		// Cleanup on unmount
+		return () => {
+			if ((window as any).collabEditor) {
+				delete (window as any).collabEditor
+			}
+		}
+	}, [provider, masterYdoc, editor, binding])
+
 
 	const statusColors: Record<string, string> = {
 		connected: '#10b981',
