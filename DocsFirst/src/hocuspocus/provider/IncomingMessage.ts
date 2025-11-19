@@ -2,6 +2,7 @@ import type { Decoder } from "lib0/decoding"
 import {
 	createDecoder,
 	peekVarString,
+	peekVarUint,
 	readVarUint,
 	readVarUint8Array,
 	readVarString,
@@ -29,6 +30,10 @@ export class IncomingMessage {
 
 	peekVarString(): string {
 		return peekVarString(this.decoder)
+	}
+
+	peekVarUint(): number {
+		return peekVarUint(this.decoder)
 	}
 
 	readVarUint(): MessageType {

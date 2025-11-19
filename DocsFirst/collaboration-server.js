@@ -1,7 +1,7 @@
 import { Logger } from '@hocuspocus/extension-logger';
 
-// 使用动态导入来加载@hocuspocus/server
-const { Server } = await import('@hocuspocus/server');
+// 使用本地移植的 server
+const { Server } = await import('./src/server/index.ts');
 
 const server = new Server({
   name: 'docsfirst-collaboration-server',
@@ -13,7 +13,7 @@ const server = new Server({
   quiet: false, // 不静默模式，显示日志
   extensions: [
     new Logger(),
-  ],
+  ], 
   async onAuthenticate(data) {
     // 简单的认证逻辑，实际项目中应该更严格
     console.log('🔐 用户认证请求:', {
@@ -106,7 +106,7 @@ server.listen(1234, async () => {
     process.exit(1);
   }
 });
-
+      
 // 优雅关闭（Server 类已经处理了信号，但我们可以添加额外的日志）
 process.on('SIGINT', async () => {
   console.log('\n🛑 正在关闭服务器...');
@@ -129,3 +129,8 @@ process.on('SIGTERM', async () => {
 });
 
 export default server;
+
+
+
+
+

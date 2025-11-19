@@ -1,13 +1,23 @@
 import { readAuthMessage } from "../common/index.js"
 import { readVarInt, readVarString, readVarUint8Array } from "lib0/decoding"
+import * as encoding from "lib0/encoding"
 import * as awarenessProtocol from "y-protocols/awareness"
-import { messageYjsSyncStep2, readSyncMessage } from "y-protocols/sync"
+import { 
+	messageYjsSyncStep2, 
+	messageYjsBatchSyncStep1,
+	messageYjsBatchSyncStep2,
+	readSyncMessage,
+	readBatchSyncStep1,
+	readBatchSyncStep2,
+	writeBatchSyncStep2,
+} from "y-protocols/sync"
 import * as Y from "yjs"
 import type { CloseEvent } from "../common/index.js"
 import type { HocuspocusProvider } from "./HocuspocusProvider.js"
 import type { IncomingMessage } from "./IncomingMessage.js"
 import { OutgoingMessage } from "./OutgoingMessage.js"
 import { MessageType } from "./types.js"
+import { BatchSyncStepTwoMessage } from "./OutgoingMessages/BatchSyncStepTwoMessage.js"
 
 export class MessageReceiver {
 	message: IncomingMessage
@@ -79,6 +89,21 @@ export class MessageReceiver {
 	private applySyncMessage(provider: HocuspocusProvider, emitSynced: boolean) {
 		const { message } = this
 
+		// Read yMessageType to check if it's a batch sync message
+		// The message structure is: documentName (already read), hMessageType (already read), yMessageType, ...
+		const yMessageType = message.peekVarUint()
+		
+		if (yMessageType === messageYjsBatchSyncStep1) {
+			// Handle BatchSyncStep1
+			this.applyBatchSyncStep1Message(provider)
+			return
+		} else if (yMessageType === messageYjsBatchSyncStep2) {
+			// Handle BatchSyncStep2
+			this.applyBatchSyncStep2Message(provider)
+			return
+		}
+
+		// Handle regular sync messages
 		message.writeVarUint(MessageType.Sync)
 
 		const syncMessageType = readSyncMessage(
@@ -90,6 +115,65 @@ export class MessageReceiver {
 
 		if (emitSynced && syncMessageType === messageYjsSyncStep2) {
 			provider.synced = true
+		}
+	}
+
+	private applyBatchSyncStep1Message(provider: HocuspocusProvider) {
+		const { message } = this
+
+		// The message structure is: documentName, hMessageType, yMessageType, ...
+		// documentName and hMessageType are already read in apply() method
+		// So we just need to read yMessageType and the batch sync data
+		// Note: peekVarUint was already called in applySyncMessage, so we need to read it now
+		const yMessageType = message.readVarUint() // Read yMessageType (should be 10)
+		
+		if (yMessageType !== messageYjsBatchSyncStep1) {
+			throw new Error(`Expected batchSyncStep1 message type, got ${yMessageType}`)
+		}
+
+		// Read batch sync step 1 data
+		const subDocs = readBatchSyncStep1(message.decoder)
+
+		// Prepare reply with BatchSyncStep2
+		message.writeVarUint(MessageType.Sync)
+		
+		// Get subdocuments from provider (assuming provider has a way to get subdocs)
+		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
+		const replySubDocs = subDocs.map(({ documentName, sv }) => {
+			const doc = subDocMap.get(documentName)
+			if (!doc) {
+				throw new Error(`Subdocument ${documentName} not found`)
+			}
+			return { documentName, doc, encodedStateVector: sv }
+		})
+
+		// Write reply message structure: documentName, hMessageType, yMessageType, batchSyncStep2 data
+		encoding.writeVarString(message.encoder, provider.configuration.name)
+		encoding.writeVarUint(message.encoder, MessageType.Sync)
+		encoding.writeVarUint(message.encoder, messageYjsBatchSyncStep2)
+		writeBatchSyncStep2(message.encoder, replySubDocs)
+	}
+
+	private applyBatchSyncStep2Message(provider: HocuspocusProvider) {
+		const { message } = this
+
+		// Read yMessageType (should be 11)
+		// Note: peekVarUint was already called in applySyncMessage, so we need to read it now
+		const yMessageType = message.readVarUint()
+		
+		if (yMessageType !== messageYjsBatchSyncStep2) {
+			throw new Error(`Expected batchSyncStep2 message type, got ${yMessageType}`)
+		}
+
+		// Get subdocuments from provider
+		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
+		
+		// Read and apply batch sync step 2 data
+		const subDocs = readBatchSyncStep2(message.decoder, subDocMap, provider)
+
+		// Handle the updates (provider can implement custom logic)
+		if (provider.handleBatchSyncStep2) {
+			provider.handleBatchSyncStep2(subDocs)
 		}
 	}
 
