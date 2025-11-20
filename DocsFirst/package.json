@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "server": "tsx collaboration-server.js",
+    "server:debug": "tsx --inspect-brk collaboration-server.js",
     "stop:server": "node stop-server.js",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
     "start:collaboration": "npm run server"

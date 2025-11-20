@@ -12,7 +12,8 @@ import { AwarenessMessage } from "./OutgoingMessages/AwarenessMessage.js"
 import { StatelessMessage } from "./OutgoingMessages/StatelessMessage.js"
 import { SyncStepOneMessage } from "./OutgoingMessages/SyncStepOneMessage.js"
 import { UpdateMessage } from "./OutgoingMessages/UpdateMessage.js"
-// import { BatchSyncStepMessage } from "./OutgoingMessages/BatchSyncStepMessage.js" // Disabled - not supported by standard Hocuspocus server
+import { BatchUpdateMessage } from "./OutgoingMessages/BatchUpdateMessage.js"
+import { BatchSyncStepOneMessage } from "./OutgoingMessages/BatchSyncStepOneMessage.js"
 import type {
 	ConstructableOutgoingMessage,
 	onAuthenticatedParameters,
@@ -104,6 +105,10 @@ export class HocuspocusProvider extends EventEmitter {
 	intervals: any = {
 		forceSync: null,
 	}
+	// Batch update collection for subdocuments
+	private pendingBatchUpdates = new Map<string, Uint8Array>()
+	private batchUpdateTimeout: ReturnType<typeof setTimeout> | null = null
+	private readonly BATCH_UPDATE_DEBOUNCE_MS = 50 // 50ms 防抖时间
 
 	constructor(configuration: HocuspocusProviderConfiguration) {
 		super()
@@ -407,6 +412,17 @@ export class HocuspocusProvider extends EventEmitter {
 	}
 
 	destroy() {
+		// Clear batch update timeout
+		if (this.batchUpdateTimeout) {
+			clearTimeout(this.batchUpdateTimeout)
+			this.batchUpdateTimeout = null
+		}
+
+		// Send any pending batch updates before destroying
+		if (this.pendingBatchUpdates.size > 0) {
+			this.sendBatchUpdate()
+		}
+
 		this.emit("destroy")
 
 		if (this.intervals.forceSync) {
@@ -550,46 +566,39 @@ export class HocuspocusProvider extends EventEmitter {
 	private subdocsHandler(event: { loaded: Set<Y.Doc>; removed: Set<Y.Doc>; added: Set<Y.Doc> }) {
 		const { removed, added } = event
 
-		// Get subdoc IDs that need to be loaded
-		const subdocIds: string[] = []
-		const subdocUpdates = new Map<string, Uint8Array>()
-
 		// Handle added subdocs
 		added.forEach((subdoc) => {
 			const subdocId = subdoc.guid
-			subdocIds.push(subdocId)
 
 			// Listen to subdoc updates
 			subdoc.on("update", (update: Uint8Array, origin: any) => {
+				// Only send updates that are not from this provider (to avoid loops)
 				if (origin !== this) {
-					subdocUpdates.set(subdocId, update)
 					this.handleUpdateChildYdoc(subdocId, update)
 				}
 			})
 		})
 
-		// Handle removed subdocs
+		// Handle removed subdocs - cleanup pending updates
 		removed.forEach((subdoc) => {
 			const subdocId = subdoc.guid
-			subdocIds.push(subdocId)
+			this.pendingBatchUpdates.delete(subdocId)
 		})
 
-		// Note: BatchSyncStep messages are not supported by standard Hocuspocus server
-		// Subdocs are automatically synced through the main document's Y.Map
-		// The childYdocs are stored in masterYdoc's data map, and Yjs handles
-		// synchronization automatically through the standard sync protocol
-		
-		// Disabled BatchSyncStep message sending to avoid server errors
-		// If you need custom subdoc sync, you'll need a custom Hocuspocus server
-		// that supports BatchSyncStep message type
-		
-		// if (subdocIds.length > 0) {
-		// 	this.send(BatchSyncStepMessage, {
-		// 		documentName: this.configuration.name,
-		// 		subdocIds,
-		// 		updates: subdocUpdates.size > 0 ? subdocUpdates : undefined,
-		// 	})
-		// }
+		// 发送 batchSyncStep1 消息给服务端
+		// 收集所有新增的子文档，准备发送同步消息
+		if (added.size > 0) {
+			const subDocs = Array.from(added).map((subdoc) => ({
+				documentName: subdoc.guid,
+				doc: subdoc,
+			}))
+
+			// 发送 BatchSyncStep1 消息
+			this.send(BatchSyncStepOneMessage, {
+				documentName: this.configuration.name,
+				subDocs,
+			})
+		}
 	}
 
 	/**
@@ -622,17 +631,89 @@ export class HocuspocusProvider extends EventEmitter {
 
 	/**
 	 * Handle child doc update
-	 * Note: BatchSyncStep messages are not supported by standard Hocuspocus server.
-	 * Subdoc updates are automatically synced through the main document's Y.Map.
-	 * The childYdoc is stored in the masterYdoc's data map, and Yjs handles
-	 * synchronization automatically through the standard sync protocol.
+	 * Collects subdoc updates and sends them as BatchUpdateMessage to the server
 	 */
-	private handleUpdateChildYdoc(_subdocId: string, _update: Uint8Array) {
-		// Disabled BatchSyncStep message sending to avoid server errors
-		// If you need custom subdoc sync, you'll need a custom Hocuspocus server
-		// that supports BatchSyncStep message type
+	private handleUpdateChildYdoc(subdocId: string, update: Uint8Array) {
+		// Store the update
+		this.pendingBatchUpdates.set(subdocId, update)
+
+		// Clear existing timeout
+		if (this.batchUpdateTimeout) {
+			clearTimeout(this.batchUpdateTimeout)
+		}
+
+		// Schedule batch update send with debounce
+		this.batchUpdateTimeout = setTimeout(() => {
+			this.sendBatchUpdate()
+		}, this.BATCH_UPDATE_DEBOUNCE_MS)
+	}
+
+	/**
+	 * Send batch update message to server
+	 */
+	private sendBatchUpdate() {
+		if (this.pendingBatchUpdates.size === 0) {
+			return
+		}
+
+		// Convert Map to array format
+		const updatedDocuments = Array.from(this.pendingBatchUpdates.entries()).map(
+			([documentName, update]) => ({
+				documentName,
+				update,
+			})
+		)
+
+		// Clear pending updates
+		this.pendingBatchUpdates.clear()
+
+		// Send batch update message
+		this.send(BatchUpdateMessage, {
+			documentName: this.configuration.name,
+			updatedDocuments,
+		})
+	}
+
+	/**
+	 * Handle batch update from server or other clients
+	 */
+	public handleBatchUpdate?(
+		updatedDocuments: Array<{ documentName: string; update: Uint8Array }>
+	): void {
+		// This method can be overridden by users to handle batch updates
+		// Default implementation applies updates to subdocuments
+		const dataMap = this.document.getMap("data")
 		
-		// Subdocs are automatically synced through Y.Map in the master document
-		// No need to send custom BatchSyncStep messages
+		updatedDocuments.forEach(({ documentName, update }) => {
+			const childYdoc = dataMap.get(documentName) as Y.Doc | undefined
+			if (childYdoc) {
+				Y.applyUpdate(childYdoc, update, this)
+			}
+		})
+	}
+
+	/**
+	 * Get subdocuments map from the main document
+	 * Main document structure:
+	 *   masterYDoc = {
+	 *     index: <blockId, index>
+	 *     data: <blockId, childYdoc>
+	 *   }
+	 * 
+	 * @returns Map<string, Y.Doc> Map of blockId to childYdoc
+	 */
+	public getSubDocMap(): Map<string, Y.Doc> {
+		const dataMap = this.document.getMap("data")
+		const subDocMap = new Map<string, Y.Doc>()
+		
+		// Iterate through all entries in the data map
+		dataMap.forEach((value, key) => {
+			// Check if the value is a Y.Doc (childYdoc)
+			if (value instanceof Y.Doc) {
+				subDocMap.set(key, value)
+			}
+		})
+		
+		return subDocMap
 	}
 }

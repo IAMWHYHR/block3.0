@@ -2,6 +2,14 @@ import { Logger } from '@hocuspocus/extension-logger';
 
 // 使用本地移植的 server
 const { Server } = await import('./src/server/index.ts');
+const { DocumentStorage } = await import('./src/server/DocumentStorage.ts');
+const { MessageReceiver } = await import('./src/server/MessageReceiver.ts');
+
+// 创建文档存储实例
+const documentStorage = new DocumentStorage('./storage/documents');
+
+// 设置 MessageReceiver 的文档存储实例
+MessageReceiver.setDocumentStorage(documentStorage);
 
 const server = new Server({
   name: 'docsfirst-collaboration-server',
@@ -49,11 +57,34 @@ const server = new Server({
   },
   async onLoadDocument(data) {
     console.log(`📄 文档加载: ${data.documentName}`);
-    return null; // 返回 null 表示创建新文档
+    
+    try {
+      // 从存储中加载文档
+      const loaded = await documentStorage.loadDocument(data.documentName, data.document);
+      
+      if (loaded) {
+        // 如果成功加载，返回已加载的文档
+        return data.document;
+      } else {
+        // 如果文档不存在，返回 null 表示创建新文档
+        return null;
+      }
+    } catch (error) {
+      console.error(`❌ 加载文档时出错: ${data.documentName}`, error);
+      // 出错时返回 null，创建新文档
+      return null;
+    }
   },
   async onStoreDocument(data) {
     console.log(`💾 文档保存: ${data.documentName}`);
-    // 这里可以添加持久化逻辑
+    
+    try {
+      // 存储主文档和所有子文档
+      await documentStorage.storeDocument(data.document);
+    } catch (error) {
+      console.error(`❌ 存储文档时出错: ${data.documentName}`, error);
+      // 不抛出错误，避免影响协同编辑流程
+    }
   },
   async onDestroy() {
     console.log('🛑 协同服务器关闭');

@@ -1,6 +1,5 @@
 import * as encoding from "lib0/encoding"
-import * as syncProtocol from "y-protocols/sync"
-import type { OutgoingMessageArguments } from "../types.js"
+import * as syncProtocol from "../../../y-protocol/sync.js"
 import { MessageType } from "../types.js"
 import { OutgoingMessage } from "../OutgoingMessage.js"
 import * as Y from "yjs"
@@ -39,4 +38,5 @@ export class BatchSyncStepOneMessage extends OutgoingMessage {
 		return this.encoder
 	}
 }
+
 

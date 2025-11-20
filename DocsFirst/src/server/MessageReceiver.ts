@@ -6,14 +6,15 @@ import {
 	messageYjsSyncStep1,
 	messageYjsSyncStep2,
 	messageYjsUpdate,
+	messageYjsBatchUpdate,
 	messageYjsBatchSyncStep1,
 	messageYjsBatchSyncStep2,
 	readSyncStep1,
 	readSyncStep2,
 	readUpdate,
+	readBatchUpdate,
 	readBatchSyncStep1,
 	readBatchSyncStep2,
-	writeBatchSyncStep2,
 } from "y-protocols/sync";
 import * as Y from "yjs";
 import type Connection from "./Connection.ts";
@@ -21,22 +22,116 @@ import type Document from "./Document.ts";
 import type { IncomingMessage } from "./IncomingMessage.ts";
 import { OutgoingMessage } from "./OutgoingMessage.ts";
 import { MessageType } from "./types.ts";
+import { DocumentStorage } from "./DocumentStorage.ts";
 
 export class MessageReceiver {
 	message: IncomingMessage;
 
 	defaultTransactionOrigin?: string;
 
+	private static documentStorage: DocumentStorage | null = null;
+
 	constructor(message: IncomingMessage, defaultTransactionOrigin?: string) {
 		this.message = message;
 		this.defaultTransactionOrigin = defaultTransactionOrigin;
 	}
 
-	public apply(
+	/**
+	 * 设置文档存储实例（应在服务器启动时调用）
+	 */
+	static setDocumentStorage(storage: DocumentStorage): void {
+		MessageReceiver.documentStorage = storage;
+	}
+
+	/**
+	 * 从数据存储中获取或创建子文档映射
+	 * documentName 在这里是子文档的标识符（通常是 blockId）
+	 */
+	private async getOrCreateSubDocMap(
+		document: Document,
+	): Promise<Map<string, Y.Doc>> {
+		const subDocMap = new Map<string, Y.Doc>();
+		const masterData = document.getMap("data") as Y.Map<string>;
+		
+		// 从 data Map 中获取所有子文档的映射关系 (blockId -> GUID)
+		masterData.forEach((childGuid: string, blockId: string) => {
+			if (typeof childGuid === "string" && childGuid.length > 0) {
+				// 在 subdocs 中查找对应的子文档
+				document.subdocs.forEach((childDoc) => {
+					if (childDoc.guid === childGuid) {
+						subDocMap.set(blockId, childDoc);
+					}
+				});
+				
+				// 如果找不到，说明子文档还没有被创建
+				// 这种情况会在需要时通过 getOrCreateChildDoc 处理
+			}
+		});
+
+		return subDocMap;
+	}
+
+	/**
+	 * 获取或创建子文档
+	 * 如果子文档不存在，创建新的子文档并添加到数据存储
+	 */
+	private async getOrCreateChildDoc(
+		document: Document,
+		documentName: string,
+	): Promise<Y.Doc> {
+		// 先从现有的 subDocMap 中查找
+		const subDocMap = await this.getOrCreateSubDocMap(document);
+		let childDoc = subDocMap.get(documentName);
+
+		if (!childDoc) {
+			// 子文档不存在，创建新的子文档
+			childDoc = new Y.Doc();
+			
+			// 将子文档添加到主文档的 subdocs 集合
+			document.subdocs.add(childDoc);
+			
+			// 将子文档的 GUID 存储到主文档的 data Map
+			const masterData = document.getMap("data") as Y.Map<string>;
+			masterData.set(documentName, childDoc.guid);
+			
+			console.log(`🆕 创建新子文档: ${document.name}/${documentName}, GUID: ${childDoc.guid}`);
+			
+			// 如果 DocumentStorage 可用，存储新创建的子文档
+			if (MessageReceiver.documentStorage) {
+				try {
+					// 创建一个临时 Document 对象来存储子文档
+					// 注意：这里我们只存储子文档本身，不存储主文档
+					const childUpdate = Y.encodeStateAsUpdate(childDoc);
+					const safeName = document.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+					const safeGuid = childDoc.guid.replace(/[^a-zA-Z0-9_-]/g, "_");
+					
+					// 使用 DocumentStorage 的存储路径逻辑
+					// @ts-ignore - node:fs/promises 和 node:path 在运行时可用
+					const fs = await import("node:fs/promises");
+					// @ts-ignore
+					const path = await import("node:path");
+					const storageDir = "./storage/documents";
+					const childPath = path.join(storageDir, `${safeName}_child_${safeGuid}.ydoc`);
+					
+					await fs.mkdir(storageDir, { recursive: true });
+					await fs.writeFile(childPath, childUpdate);
+					
+					console.log(`💾 已存储新创建的子文档: ${document.name}/${documentName}`);
+				} catch (error) {
+					console.error(`❌ 存储新子文档失败: ${document.name}/${documentName}`, error);
+					// 不抛出错误，允许继续执行
+				}
+			}
+		}
+
+		return childDoc;
+	}
+
+	public async apply(
 		document: Document,
 		connection?: Connection,
 		reply?: (message: Uint8Array) => void,
-	) {
+	): Promise<void> {
 		const { message } = this;
 		const type = message.readVarUint();
 		const emptyMessageLength = message.length;
@@ -45,7 +140,7 @@ export class MessageReceiver {
 			case MessageType.Sync:
 			case MessageType.SyncReply: {
 				message.writeVarUint(MessageType.Sync);
-				this.readSyncMessage(
+				await this.readSyncMessage(
 					message,
 					document,
 					connection,
@@ -131,13 +226,13 @@ export class MessageReceiver {
 		}
 	}
 
-	readSyncMessage(
+	async readSyncMessage(
 		message: IncomingMessage,
 		document: Document,
 		connection?: Connection,
 		reply?: (message: Uint8Array) => void,
 		requestFirstSync = true,
-	) {
+	): Promise<void> {
 		const type = message.readVarUint();
 
 		if (connection) {
@@ -225,19 +320,71 @@ export class MessageReceiver {
 					);
 				}
 				break;
+			case messageYjsBatchUpdate: {
+				// Handle BatchUpdate from client
+				const updatedDocuments = readBatchUpdate(message.decoder);
+				
+				// Get subdocuments from data storage
+				const subDocMap = await this.getOrCreateSubDocMap(document);
+				
+				// Apply updates to subdocuments
+				for (const { documentName, update } of updatedDocuments) {
+					let doc = subDocMap.get(documentName);
+					
+					// 如果子文档不存在，创建新的子文档
+					if (!doc) {
+						doc = await this.getOrCreateChildDoc(document, documentName);
+					}
+					
+					if (doc) {
+						try {
+							Y.applyUpdate(doc, update, connection ?? this.defaultTransactionOrigin);
+						} catch (error) {
+							console.error(`Caught error while handling a batch update for subdoc ${documentName}`, error);
+						}
+					}
+				}
+
+				// Broadcast the batch update to all other clients
+				const batchUpdateMessage = new OutgoingMessage(document.name)
+					.createBatchUpdateMessage(updatedDocuments);
+				
+				document.getConnections().forEach((conn) => {
+					if (conn !== connection) {
+						conn.send(batchUpdateMessage.toUint8Array());
+					}
+				});
+
+				// Acknowledge the update
+				if (connection) {
+					connection.send(
+						new OutgoingMessage(document.name)
+							.writeSyncStatus(true)
+							.toUint8Array(),
+					);
+				}
+				break;
+			}
 			case messageYjsBatchSyncStep1: {
 				// Handle BatchSyncStep1 from client
 				const subDocs = readBatchSyncStep1(message.decoder);
 				
-				// Get subdocuments from document (assuming document has a way to get subdocs)
-				const subDocMap = document.getSubDocMap?.() || new Map<string, Y.Doc>();
-				const replySubDocs = subDocs.map(({ documentName, sv }) => {
-					const doc = subDocMap.get(documentName);
-					if (!doc) {
-						throw new Error(`Subdocument ${documentName} not found`);
-					}
-					return { documentName, doc, encodedStateVector: sv };
-				});
+				// 从数据存储中获取子文档映射，如果不存在则创建
+				const subDocMap = await this.getOrCreateSubDocMap(document);
+				
+				// 为每个请求的子文档获取或创建子文档
+				const replySubDocs = await Promise.all(
+					subDocs.map(async ({ documentName, sv }: { documentName: string; sv: Uint8Array }) => {
+						let doc = subDocMap.get(documentName);
+						
+						// 如果子文档不存在，创建新的子文档
+						if (!doc) {
+							doc = await this.getOrCreateChildDoc(document, documentName);
+						}
+						
+						return { documentName, doc, encodedStateVector: sv };
+					})
+				);
 
 				// Reply with BatchSyncStep2
 				if (reply) {
@@ -253,8 +400,8 @@ export class MessageReceiver {
 			}
 			case messageYjsBatchSyncStep2: {
 				// Handle BatchSyncStep2 from client
-				const subDocMap = document.getSubDocMap?.() || new Map<string, Y.Doc>();
-				const subDocs = readBatchSyncStep2(
+				const subDocMap = await this.getOrCreateSubDocMap(document);
+				readBatchSyncStep2(
 					message.decoder,
 					subDocMap,
 					connection ?? this.defaultTransactionOrigin,
@@ -273,8 +420,6 @@ export class MessageReceiver {
 			default:
 				throw new Error(`Received a message with an unknown type: ${type}`);
 		}
-
-		return type;
 	}
 
 	applyQueryAwarenessMessage(

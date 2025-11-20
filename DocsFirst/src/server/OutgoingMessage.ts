@@ -11,7 +11,9 @@ import { encodeAwarenessUpdate } from "y-protocols/awareness";
 import { 
 	writeSyncStep1, 
 	writeUpdate,
+	writeBatchUpdate,
 	writeBatchSyncStep2,
+	messageYjsBatchUpdate,
 	messageYjsBatchSyncStep2,
 } from "y-protocols/sync";
 import * as Y from "yjs";
@@ -171,6 +173,22 @@ export class OutgoingMessage {
 		writeVarUint(this.encoder, messageYjsBatchSyncStep2);
 		// Write batch sync step 2 data
 		writeBatchSyncStep2(this.encoder, subDocs);
+
+		return this;
+	}
+
+	createBatchUpdateMessage(
+		updatedDocuments: Array<{ documentName: string; update: Uint8Array }>
+	): OutgoingMessage {
+		this.type = MessageType.Sync;
+		this.category = "BatchUpdate";
+
+		// Write hMessageType (Hocuspocus消息类型，固定填0：Sync)
+		writeVarUint(this.encoder, MessageType.Sync);
+		// Write yMessageType (yjs消息类型，固定填9：batchUpdate)
+		writeVarUint(this.encoder, messageYjsBatchUpdate);
+		// Write batch update data
+		writeBatchUpdate(this.encoder, updatedDocuments);
 
 		return this;
 	}

@@ -4,20 +4,21 @@ import * as encoding from "lib0/encoding"
 import * as awarenessProtocol from "y-protocols/awareness"
 import { 
 	messageYjsSyncStep2, 
+	messageYjsBatchUpdate,
 	messageYjsBatchSyncStep1,
 	messageYjsBatchSyncStep2,
 	readSyncMessage,
 	readBatchSyncStep1,
 	readBatchSyncStep2,
+	readBatchUpdate,
 	writeBatchSyncStep2,
-} from "y-protocols/sync"
+} from "../../y-protocol/sync.js"
 import * as Y from "yjs"
 import type { CloseEvent } from "../common/index.js"
 import type { HocuspocusProvider } from "./HocuspocusProvider.js"
 import type { IncomingMessage } from "./IncomingMessage.js"
 import { OutgoingMessage } from "./OutgoingMessage.js"
 import { MessageType } from "./types.js"
-import { BatchSyncStepTwoMessage } from "./OutgoingMessages/BatchSyncStepTwoMessage.js"
 
 export class MessageReceiver {
 	message: IncomingMessage
@@ -89,11 +90,15 @@ export class MessageReceiver {
 	private applySyncMessage(provider: HocuspocusProvider, emitSynced: boolean) {
 		const { message } = this
 
-		// Read yMessageType to check if it's a batch sync message
+		// Read yMessageType to check if it's a batch message
 		// The message structure is: documentName (already read), hMessageType (already read), yMessageType, ...
 		const yMessageType = message.peekVarUint()
 		
-		if (yMessageType === messageYjsBatchSyncStep1) {
+		if (yMessageType === messageYjsBatchUpdate) {
+			// Handle BatchUpdate
+			this.applyBatchUpdateMessage(provider)
+			return
+		} else if (yMessageType === messageYjsBatchSyncStep1) {
 			// Handle BatchSyncStep1
 			this.applyBatchSyncStep1Message(provider)
 			return
@@ -118,6 +123,41 @@ export class MessageReceiver {
 		}
 	}
 
+	private applyBatchUpdateMessage(provider: HocuspocusProvider) {
+		const { message } = this
+
+		// Read yMessageType (should be 9)
+		// Note: peekVarUint was already called in applySyncMessage, so we need to read it now
+		const yMessageType = message.readVarUint()
+		
+		if (yMessageType !== messageYjsBatchUpdate) {
+			throw new Error(`Expected batchUpdate message type, got ${yMessageType}`)
+		}
+
+		// Read batch update data
+		const updatedDocuments = readBatchUpdate(message.decoder)
+
+		// Get subdocuments from provider
+		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
+		
+		// Apply updates to subdocuments
+		updatedDocuments.forEach(({ documentName, update }: { documentName: string; update: Uint8Array }) => {
+			const doc = subDocMap.get(documentName)
+			if (doc) {
+				try {
+					Y.applyUpdate(doc, update, provider)
+				} catch (error) {
+					console.error(`Caught error while handling a batch update for subdoc ${documentName}`, error)
+				}
+			}
+		})
+
+		// Handle the updates (provider can implement custom logic)
+		if (provider.handleBatchUpdate) {
+			provider.handleBatchUpdate(updatedDocuments)
+		}
+	}
+
 	private applyBatchSyncStep1Message(provider: HocuspocusProvider) {
 		const { message } = this
 
@@ -137,13 +177,36 @@ export class MessageReceiver {
 		// Prepare reply with BatchSyncStep2
 		message.writeVarUint(MessageType.Sync)
 		
-		// Get subdocuments from provider (assuming provider has a way to get subdocs)
+		// Get subdocuments from provider
 		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
-		const replySubDocs = subDocs.map(({ documentName, sv }) => {
-			const doc = subDocMap.get(documentName)
+		const dataMap = provider.document.getMap("data")
+		
+		const replySubDocs = subDocs.map(({ documentName, sv }: { documentName: string; sv: Uint8Array }) => {
+			let doc = subDocMap.get(documentName)
+			
+			// If subdocument doesn't exist, create it
 			if (!doc) {
-				throw new Error(`Subdocument ${documentName} not found`)
+				// Create new childYdoc
+				doc = new Y.Doc()
+				
+				// Add to master document's subdocs collection
+				provider.document.subdocs.add(doc)
+				
+				// Store in data map
+				dataMap.set(documentName, doc)
+				
+				// Load the subdocument if supported
+				if (typeof (doc as any).load === 'function') {
+					try {
+						(doc as any).load()
+					} catch (e) {
+						// Ignore load errors
+					}
+				}
 			}
+			
+			// Return with the state vector from the server (sv)
+			// If doc is newly created, sv will be empty, which means we need all updates
 			return { documentName, doc, encodedStateVector: sv }
 		})
 
@@ -169,12 +232,8 @@ export class MessageReceiver {
 		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
 		
 		// Read and apply batch sync step 2 data
-		const subDocs = readBatchSyncStep2(message.decoder, subDocMap, provider)
-
-		// Handle the updates (provider can implement custom logic)
-		if (provider.handleBatchSyncStep2) {
-			provider.handleBatchSyncStep2(subDocs)
-		}
+		// readBatchSyncStep2 already applies updates to subdocuments
+		readBatchSyncStep2(message.decoder, subDocMap, provider)
 	}
 
 	applySyncStatusMessage(provider: HocuspocusProvider, applied: boolean) {

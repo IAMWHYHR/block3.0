@@ -38,6 +38,7 @@ import * as Y from 'yjs'
 export const messageYjsSyncStep1 = 0
 export const messageYjsSyncStep2 = 1
 export const messageYjsUpdate = 2
+export const messageYjsBatchUpdate = 9
 export const messageYjsBatchSyncStep1 = 10
 export const messageYjsBatchSyncStep2 = 11
 
@@ -109,12 +110,13 @@ export const readUpdate = readSyncStep2
 
 /**
  * Create a batch sync step 1 message for multiple subdocuments.
+ * Note: yMessageType should be written before calling this function.
  *
  * @param {encoding.Encoder} encoder
  * @param {Array<{documentName: string, doc: Y.Doc}>} subDocs Array of subdocuments with their names
  */
 export const writeBatchSyncStep1 = (encoder, subDocs) => {
-  encoding.writeVarUint(encoder, messageYjsBatchSyncStep1)
+  // yMessageType is written by the caller (BatchSyncStepOneMessage)
   encoding.writeVarUint(encoder, subDocs.length)
   
   for (const { documentName, doc } of subDocs) {
@@ -126,12 +128,13 @@ export const writeBatchSyncStep1 = (encoder, subDocs) => {
 
 /**
  * Create a batch sync step 2 message for multiple subdocuments.
+ * Note: yMessageType should be written before calling this function.
  *
  * @param {encoding.Encoder} encoder
  * @param {Array<{documentName: string, doc: Y.Doc, encodedStateVector: Uint8Array}>} subDocs Array of subdocuments with their names and state vectors
  */
 export const writeBatchSyncStep2 = (encoder, subDocs) => {
-  encoding.writeVarUint(encoder, messageYjsBatchSyncStep2)
+  // yMessageType is written by the caller (BatchSyncStepTwoMessage or server OutgoingMessage)
   encoding.writeVarUint(encoder, subDocs.length)
   
   for (const { documentName, doc, encodedStateVector } of subDocs) {
@@ -192,6 +195,42 @@ export const readBatchSyncStep2 = (decoder, subDocMap, transactionOrigin) => {
 }
 
 /**
+ * Create a batch update message for multiple subdocuments.
+ * Note: yMessageType should be written before calling this function.
+ *
+ * @param {encoding.Encoder} encoder
+ * @param {Array<{documentName: string, update: Uint8Array}>} updatedDocuments Array of subdocuments with their updates
+ */
+export const writeBatchUpdate = (encoder, updatedDocuments) => {
+  // yMessageType is written by the caller (BatchUpdateMessage or server OutgoingMessage)
+  encoding.writeVarUint(encoder, updatedDocuments.length)
+  
+  for (const { documentName, update } of updatedDocuments) {
+    encoding.writeVarString(encoder, documentName)
+    encoding.writeVarUint8Array(encoder, update)
+  }
+}
+
+/**
+ * Read BatchUpdate message and return subdocuments data.
+ *
+ * @param {decoding.Decoder} decoder
+ * @returns {Array<{documentName: string, update: Uint8Array}>} Array of subdocuments with their updates
+ */
+export const readBatchUpdate = (decoder) => {
+  const updatedCount = decoding.readVarUint(decoder)
+  const updatedDocuments = []
+  
+  for (let i = 0; i < updatedCount; i++) {
+    const documentName = decoding.readVarString(decoder)
+    const update = decoding.readVarUint8Array(decoder)
+    updatedDocuments.push({ documentName, update })
+  }
+  
+  return updatedDocuments
+}
+
+/**
  * @param {decoding.Decoder} decoder A message received from another client
  * @param {encoding.Encoder} encoder The reply message. Does not need to be sent if empty.
  * @param {Y.Doc} doc
@@ -206,13 +245,14 @@ export const readSyncMessage = (decoder, encoder, doc, transactionOrigin) => {
     case messageYjsSyncStep2:
       readSyncStep2(decoder, doc, transactionOrigin)
       break
-    case messageYjsUpdate:
+    case messageYjsUpdate:  
       readUpdate(decoder, doc, transactionOrigin)
       break
+    case messageYjsBatchUpdate:
     case messageYjsBatchSyncStep1:
     case messageYjsBatchSyncStep2:
-      // Batch sync messages are handled separately, not through readSyncMessage
-      throw new Error('Batch sync messages should be handled separately')
+      // Batch messages are handled separately, not through readSyncMessage
+      throw new Error('Batch messages should be handled separately')
     default:
       throw new Error('Unknown message type')
   }

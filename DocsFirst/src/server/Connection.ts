@@ -215,9 +215,9 @@ export class Connection {
 
 		this.callbacks
 			.beforeHandleMessage(this, data)
-			.then(() => {
+			.then(async () => {
 				try {
-					new MessageReceiver(message).apply(this.document, this);
+					await new MessageReceiver(message).apply(this.document, this);
 				} catch (e: any) {
 					console.error(
 						`closing connection ${this.socketId} (while handling ${documentName}) because of exception`,
