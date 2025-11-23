@@ -109,6 +109,25 @@ export class HocuspocusProvider extends EventEmitter {
 	private pendingBatchUpdates = new Map<string, Uint8Array>()
 	private batchUpdateTimeout: ReturnType<typeof setTimeout> | null = null
 	private readonly BATCH_UPDATE_DEBOUNCE_MS = 50 // 50ms 防抖时间
+	
+	// Special origin marker for server-synced updates to prevent circular updates
+	// Using a string constant instead of Symbol for easier comparison
+	private static readonly SERVER_SYNC_ORIGIN = '__HOCUSPOCUS_SERVER_SYNC_ORIGIN__'
+	
+	/**
+	 * Get the SERVER_SYNC_ORIGIN marker for identifying server-synced updates
+	 * This is used by MasterDocumentBinding to prevent circular updates
+	 */
+	public getServerSyncOrigin(): string {
+		return HocuspocusProvider.SERVER_SYNC_ORIGIN
+	}
+	
+	/**
+	 * Check if an origin is the server sync origin
+	 */
+	public static isServerSyncOrigin(origin: any): boolean {
+		return origin === HocuspocusProvider.SERVER_SYNC_ORIGIN
+	}
 
 	constructor(configuration: HocuspocusProviderConfiguration) {
 		super()
@@ -572,8 +591,9 @@ export class HocuspocusProvider extends EventEmitter {
 
 			// Listen to subdoc updates
 			subdoc.on("update", (update: Uint8Array, origin: any) => {
-				// Only send updates that are not from this provider (to avoid loops)
-				if (origin !== this) {
+				// Only send updates that are not from this provider and not from server sync (to avoid loops)
+				// Check if origin is this provider or the special server sync marker
+				if (origin !== this && !HocuspocusProvider.isServerSyncOrigin(origin)) {
 					this.handleUpdateChildYdoc(subdocId, update)
 				}
 			})
@@ -609,12 +629,14 @@ export class HocuspocusProvider extends EventEmitter {
 		updates: Map<string, Uint8Array>,
 	): void {
 		// Apply updates to subdocs
+		// Use SERVER_SYNC_ORIGIN to mark these updates as coming from server,
+		// so they won't trigger sending updates back to server
 		updates.forEach((update, subdocId) => {
 			const dataMap = this.document.getMap("data")
 			const childYdoc = dataMap.get(subdocId) as Y.Doc | undefined
 
 			if (childYdoc) {
-				Y.applyUpdate(childYdoc, update, this)
+				Y.applyUpdate(childYdoc, update, HocuspocusProvider.SERVER_SYNC_ORIGIN)
 			}
 		})
 
@@ -682,12 +704,14 @@ export class HocuspocusProvider extends EventEmitter {
 	): void {
 		// This method can be overridden by users to handle batch updates
 		// Default implementation applies updates to subdocuments
+		// Use SERVER_SYNC_ORIGIN to mark these updates as coming from server,
+		// so they won't trigger sending updates back to server
 		const dataMap = this.document.getMap("data")
 		
 		updatedDocuments.forEach(({ documentName, update }) => {
 			const childYdoc = dataMap.get(documentName) as Y.Doc | undefined
 			if (childYdoc) {
-				Y.applyUpdate(childYdoc, update, this)
+				Y.applyUpdate(childYdoc, update, HocuspocusProvider.SERVER_SYNC_ORIGIN)
 			}
 		})
 	}
@@ -703,17 +727,32 @@ export class HocuspocusProvider extends EventEmitter {
 	 * @returns Map<string, Y.Doc> Map of blockId to childYdoc
 	 */
 	public getSubDocMap(): Map<string, Y.Doc> {
-		const dataMap = this.document.getMap("data")
+		const dataMap = this.document.getMap("data") as Y.Map<Y.Doc | string>
 		const subDocMap = new Map<string, Y.Doc>()
 		
 		// Iterate through all entries in the data map
-		dataMap.forEach((value, key) => {
-			// Check if the value is a Y.Doc (childYdoc)
+		// dataMap stores: blockId -> Y.Doc (but Y.js may serialize Y.Doc to GUID string)
+		dataMap.forEach((value: Y.Doc | string, blockId: string) => {
 			if (value instanceof Y.Doc) {
-				subDocMap.set(key, value)
+				// Direct Y.Doc object
+				subDocMap.set(blockId, value)
+			} else if (typeof value === "string" && value.length > 0) {
+				// Y.js serialized Y.Doc to GUID string, need to find it in subdocs
+				// Search in document.subdocs for the matching Y.Doc by GUID
+				let found = false
+				this.document.subdocs.forEach((childDoc) => {
+					if (childDoc.guid === value) {
+						subDocMap.set(blockId, childDoc)
+						found = true
+					}
+				})
+				if (!found) {
+					console.warn(`⚠️ Could not find subdoc with GUID ${value} for blockId ${blockId}`)
+				}
 			}
 		})
 		
+		console.log(`📋 getSubDocMap: found ${subDocMap.size} subdocs from ${dataMap.size} entries in dataMap`)
 		return subDocMap
 	}
 }

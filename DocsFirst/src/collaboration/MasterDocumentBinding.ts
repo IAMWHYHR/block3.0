@@ -1,7 +1,10 @@
 import * as Y from 'yjs'
+import * as PModel from 'prosemirror-model'
 import { Editor } from '@tiptap/core'
-import { BlockBinding } from './BlockBinding.js'
+import { BlockBinding, createNodeFromYElement } from './BlockBinding.js'
 import { EditorView } from 'prosemirror-view'
+// @ts-ignore - y-prosemirror is a JS module
+import { createEmptyMeta } from '../y-prosemirror/plugins/sync-plugin.js'
 
 /**
  * Master document structure:
@@ -17,36 +20,177 @@ export class MasterDocumentBinding {
 	private readonly indexMap: Y.Map<number>
 	private readonly dataMap: Y.Map<Y.Doc>
 	public readonly blockBindings: Map<string, BlockBinding> = new Map()
-	private readonly _observeFunction: (events: Y.YEvent<any>[], transaction: Y.Transaction) => void
 	private isDestroyed = false
+	private isFirstSync = true
+	private observeDeepHandler: ((events: Y.YEvent<any>[], transaction: Y.Transaction) => void) | null = null
+	// Reference to SERVER_SYNC_ORIGIN to identify server-synced updates
+	private serverSyncOrigin: any = null
 
-	constructor(masterYdoc: Y.Doc, editor: Editor) {
+	constructor(masterYdoc: Y.Doc, editor: Editor, serverSyncOrigin?: any) {
 		this.masterYdoc = masterYdoc
 		this.editor = editor
 		this.editorView = editor.view
+		this.serverSyncOrigin = serverSyncOrigin || null
 
 		// Initialize maps
 		this.indexMap = masterYdoc.getMap('index')
 		this.dataMap = masterYdoc.getMap('data')
 
-		this._observeFunction = this._masterDocChanged.bind(this)
+		// Initial sync - full document replacement on first sync
+		// Delay to next event loop to avoid React setState during render
+		setTimeout(() => {
+			this._initialFullSync()
+		}, 0)
 
-		// Listen to master document changes
-		this.indexMap.observe(this._observeFunction)
-		this.dataMap.observe(this._observeFunction)
-
-		// Initial sync
-		this._syncMasterToEditor()
+		// Listen to master document changes using observeDeep
+		this._setupObserveDeep()
 
 		// Listen to editor changes
-		this.editor.on('update', this._editorChanged.bind(this))
+		// ProseMirror's update event passes { view, state, oldState, transaction }
+		this.editor.on('update', ({ transaction }: { transaction?: any }) => {
+			this._editorChanged({ transaction })
+		})
 	}
 
 	/**
-	 * Sync master document to editor
+	 * Initial full sync - convert collaborative data to ProseMirror and replace entire document
+	 */
+	private _initialFullSync() {
+		if (this.isDestroyed) return
+
+		console.log('🔄 开始初始全量同步...')
+
+		// Get all blocks from master document, sorted by index
+		const blocks: Array<{ blockId: string; index: number; childYdoc: Y.Doc }> = []
+		this.indexMap.forEach((index, blockId) => {
+			const childYdoc = this.dataMap.get(blockId) as Y.Doc | undefined
+			if (childYdoc instanceof Y.Doc) {
+				blocks.push({ blockId, index, childYdoc })
+			} else if (typeof childYdoc === 'string') {
+				// If Y.js serialized to GUID, find in subdocs
+				this.masterYdoc.subdocs.forEach((doc) => {
+					if (doc.guid === childYdoc) {
+						blocks.push({ blockId, index, childYdoc: doc })
+					}
+				})
+			}
+		})
+
+		// Sort by index
+		blocks.sort((a, b) => a.index - b.index)
+
+		if (blocks.length === 0) {
+			console.log('⚠️ 没有找到任何块，跳过初始同步')
+			this.isFirstSync = false
+			return
+		}
+
+		// Convert each childYdoc's YXmlFragment to ProseMirror nodes
+		const schema = this.editorView.state.schema
+		const meta = createEmptyMeta()
+		const fragmentContent: PModel.Node[] = []
+
+		for (const { blockId, childYdoc } of blocks) {
+			// Load child doc if not loaded
+			if (!childYdoc.isLoaded) {
+				childYdoc.load()
+			}
+
+			// Get YXmlFragment from childYdoc
+			const fragment = childYdoc.getXmlFragment('default')
+			const fragmentArray = fragment.toArray()
+
+			// Find the top-level YXmlElement (should be the block node)
+			let topLevelElement: Y.XmlElement | null = null
+			for (const item of fragmentArray) {
+				if (item instanceof Y.XmlElement) {
+					topLevelElement = item
+					break
+				}
+			}
+
+			if (topLevelElement) {
+				// Convert YXmlElement to ProseMirror node
+				const node = createNodeFromYElement(
+					topLevelElement,
+					schema,
+					meta
+				)
+
+				if (node) {
+					fragmentContent.push(node)
+				} else {
+					console.warn(`⚠️ 无法转换块 ${blockId} 为 ProseMirror 节点`)
+				}
+			} else {
+				console.warn(`⚠️ 块 ${blockId} 的 YXmlFragment 中没有找到顶层元素`)
+			}
+		}
+
+		if (fragmentContent.length === 0) {
+			console.log('⚠️ 没有可用的内容，跳过初始同步')
+			this.isFirstSync = false
+			return
+		}
+
+		// Replace entire document content (similar to sync-plugin.js _forceRerender)
+		const tr = this.editorView.state.tr.replace(
+			0,
+			this.editorView.state.doc.content.size,
+			new PModel.Slice(PModel.Fragment.from(fragmentContent), 0, 0)
+		)
+
+		// Dispatch transaction
+		this.editorView.dispatch(tr)
+
+		console.log(`✅ 初始全量同步完成，替换了 ${fragmentContent.length} 个块`)
+
+		// Create block bindings for all blocks
+		for (const { blockId, childYdoc } of blocks) {
+			// Find the corresponding block node in the editor
+			let blockNode: PModel.Node | null = null
+			this._traverseEditorDoc((node) => {
+				if (node.attrs && node.attrs.uuid === blockId) {
+					blockNode = node
+				}
+			})
+
+			if (blockNode) {
+				this._createBlockBinding(blockId, childYdoc, blockNode, false) // false = don't sync from fragment, editor already has latest
+			} else {
+				console.warn(`⚠️ 无法找到块 ${blockId} 对应的编辑器节点`)
+			}
+		}
+
+		this.isFirstSync = false
+	}
+
+	/**
+	 * Setup observeDeep to listen to master document changes
+	 */
+	private _setupObserveDeep() {
+		if (this.isDestroyed) return
+
+		this.observeDeepHandler = (events: Y.YEvent<any>[], transaction: Y.Transaction) => {
+			if (this.isDestroyed) return
+			if (this.isFirstSync) return // Skip during initial sync
+
+			// Handle master document changes
+			this._masterDocChanged(events, transaction)
+		}
+
+		// Observe deep changes on indexMap and dataMap
+		// observeDeep is a method on AbstractType (which Y.Map extends)
+		;(this.indexMap as any).observeDeep(this.observeDeepHandler)
+		;(this.dataMap as any).observeDeep(this.observeDeepHandler)
+	}
+
+	/**
+	 * Sync master document to editor (incremental updates after initial sync)
 	 */
 	private _syncMasterToEditor() {
 		if (this.isDestroyed) return
+		if (this.isFirstSync) return // Skip during initial sync
 
 		// Get all block IDs from master document
 		const masterBlockIds = new Set<string>()
@@ -198,6 +342,7 @@ export class MasterDocumentBinding {
 			actualBlockNode,
 			this.editorView,
 			shouldSyncFromFragment,
+			this.serverSyncOrigin,
 		)
 		this.blockBindings.set(blockId, binding)
 		console.log(`✅ Created BlockBinding for blockId: ${blockId}, total bindings: ${this.blockBindings.size}`)
@@ -223,8 +368,14 @@ export class MasterDocumentBinding {
 	/**
 	 * Handle editor changes
 	 */
-	private _editorChanged() {
+	private _editorChanged({ transaction }: { transaction?: any } = {}) {
 		if (this.isDestroyed) return
+		
+		// Check if this change is from Y.js sync (server sync)
+		// If so, don't process it to avoid circular updates
+		if (transaction && transaction.getMeta && transaction.getMeta('yjsSync')) {
+			return
+		}
 
 		// Get current block IDs from editor
 		const editorBlockIds = new Set<string>()
@@ -296,12 +447,17 @@ export class MasterDocumentBinding {
 		}, this)
 
 		// Add to master document
+		// 注意：先设置 dataMap，再添加 subdocs，避免触发 subdocsHandler 时 dataMap 还没有更新
 		const index = this.indexMap.size
 		this.masterYdoc.transact(() => {
 			this.indexMap.set(blockId, index)
 			this.dataMap.set(blockId, childYdoc)
-			childYdoc.load()
 		}, this)
+		
+		// 在事务外添加 subdocs，避免在事务中触发 subdocs 事件
+		// 这样主文档的更新会先同步，然后再触发 subdocs 事件
+		this.masterYdoc.subdocs.add(childYdoc)
+		childYdoc.load()
 
 		// Create binding without sync from fragment (editor -> master)
 		// When editor has new node but master doc doesn't have it,
@@ -470,8 +626,11 @@ export class MasterDocumentBinding {
 		this.blockBindings.clear()
 
 		// Remove observers
-		this.indexMap.unobserve(this._observeFunction)
-		this.dataMap.unobserve(this._observeFunction)
+		if (this.observeDeepHandler) {
+			;(this.indexMap as any).unobserveDeep(this.observeDeepHandler)
+			;(this.dataMap as any).unobserveDeep(this.observeDeepHandler)
+			this.observeDeepHandler = null
+		}
 
 		// Remove editor listener
 		this.editor.off('update', this._editorChanged.bind(this))

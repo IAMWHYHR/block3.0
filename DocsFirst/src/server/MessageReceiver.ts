@@ -46,25 +46,27 @@ export class MessageReceiver {
 	/**
 	 * 从数据存储中获取或创建子文档映射
 	 * documentName 在这里是子文档的标识符（通常是 blockId）
+	 * dataMap 存储: blockId -> Y.Doc
 	 */
 	private async getOrCreateSubDocMap(
 		document: Document,
 	): Promise<Map<string, Y.Doc>> {
 		const subDocMap = new Map<string, Y.Doc>();
-		const masterData = document.getMap("data") as Y.Map<string>;
+		const masterData = document.getMap("data") as Y.Map<Y.Doc | string>;
 		
-		// 从 data Map 中获取所有子文档的映射关系 (blockId -> GUID)
-		masterData.forEach((childGuid: string, blockId: string) => {
-			if (typeof childGuid === "string" && childGuid.length > 0) {
-				// 在 subdocs 中查找对应的子文档
+		// 从 data Map 中获取所有子文档的映射关系 (blockId -> Y.Doc)
+		// 注意：Y.js 可能会将 Y.Doc 序列化为 GUID 字符串
+		masterData.forEach((value: Y.Doc | string, blockId: string) => {
+			if (value instanceof Y.Doc) {
+				// 直接是 Y.Doc 对象
+				subDocMap.set(blockId, value);
+			} else if (typeof value === "string" && value.length > 0) {
+				// Y.js 将 Y.Doc 序列化为了 GUID 字符串，需要在 subdocs 中查找
 				document.subdocs.forEach((childDoc) => {
-					if (childDoc.guid === childGuid) {
+					if (childDoc.guid === value) {
 						subDocMap.set(blockId, childDoc);
 					}
 				});
-				
-				// 如果找不到，说明子文档还没有被创建
-				// 这种情况会在需要时通过 getOrCreateChildDoc 处理
 			}
 		});
 
@@ -84,17 +86,33 @@ export class MessageReceiver {
 		let childDoc = subDocMap.get(documentName);
 
 		if (!childDoc) {
-			// 子文档不存在，创建新的子文档
-			childDoc = new Y.Doc();
-			
-			// 将子文档添加到主文档的 subdocs 集合
-			document.subdocs.add(childDoc);
-			
-			// 将子文档的 GUID 存储到主文档的 data Map
-			const masterData = document.getMap("data") as Y.Map<string>;
-			masterData.set(documentName, childDoc.guid);
-			
-			console.log(`🆕 创建新子文档: ${document.name}/${documentName}, GUID: ${childDoc.guid}`);
+			// 子文档不存在，先检查 subdocs 中是否已有相同 GUID 的子文档
+			// 注意：documentName 应该是 blockId，客户端创建子文档时使用 blockId 作为 guid
+			let existingDoc: Y.Doc | null = null;
+			document.subdocs.forEach((doc) => {
+				if (doc.guid === documentName) {
+					existingDoc = doc;
+				}
+			});
+
+			if (existingDoc) {
+				// 如果 subdocs 中已存在相同 GUID 的子文档，使用它
+				childDoc = existingDoc;
+				console.log(`✅ 找到已存在的子文档: ${document.name}/${documentName}, GUID: ${childDoc.guid}`);
+			} else {
+				// 创建新的子文档，使用 documentName 作为 guid，以保持与客户端的一致性
+				childDoc = new Y.Doc({ guid: documentName });
+				
+				// 将子文档添加到主文档的 subdocs 集合
+				document.subdocs.add(childDoc);
+				
+				// 将子文档存储到主文档的 data Map (blockId -> Y.Doc)
+				// 注意：Y.js 可能会自动将 Y.Doc 序列化为 GUID，但我们可以尝试直接存储
+				const masterData = document.getMap("data") as Y.Map<Y.Doc>;
+				masterData.set(documentName, childDoc);
+				
+				console.log(`🆕 创建新子文档: ${document.name}/${documentName}, GUID: ${childDoc.guid}`);
+			}
 			
 			// 如果 DocumentStorage 可用，存储新创建的子文档
 			if (MessageReceiver.documentStorage) {
@@ -369,15 +387,27 @@ export class MessageReceiver {
 				// Handle BatchSyncStep1 from client
 				const subDocs = readBatchSyncStep1(message.decoder);
 				
-				// 从数据存储中获取子文档映射，如果不存在则创建
+				// 从数据存储中获取子文档映射
 				const subDocMap = await this.getOrCreateSubDocMap(document);
 				
 				// 为每个请求的子文档获取或创建子文档
 				const replySubDocs = await Promise.all(
 					subDocs.map(async ({ documentName, sv }: { documentName: string; sv: Uint8Array }) => {
+						// documentName 应该是 blockId（因为客户端创建时使用 blockId 作为 guid）
 						let doc = subDocMap.get(documentName);
 						
-						// 如果子文档不存在，创建新的子文档
+						// 如果子文档不存在，尝试从 subdocs 中根据 GUID 查找
+						if (!doc) {
+							// 在 subdocs 中查找 GUID 等于 documentName 的子文档
+							document.subdocs.forEach((childDoc) => {
+								if (childDoc.guid === documentName) {
+									doc = childDoc;
+								}
+							});
+						}
+						
+						// 如果仍然找不到，使用 getOrCreateChildDoc 创建或获取
+						// getOrCreateChildDoc 会检查 subdocs 中是否已存在相同 GUID 的子文档，避免重复创建
 						if (!doc) {
 							doc = await this.getOrCreateChildDoc(document, documentName);
 						}

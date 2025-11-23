@@ -139,14 +139,16 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 		// Note: MasterDocumentBinding might need sync, but we'll create it when connected
 		if (isSynced || connectionStatus === 'connected') {
 			try {
-				return new MasterDocumentBinding(masterYdoc, editor)
+				// Get SERVER_SYNC_ORIGIN from provider to prevent circular updates
+				const serverSyncOrigin = provider?.getServerSyncOrigin?.() || null
+				return new MasterDocumentBinding(masterYdoc, editor, serverSyncOrigin)
 			} catch (error) {
 				console.error('创建 MasterDocumentBinding 失败:', error)
 				return null
 			}
 		}
 		return null
-	}, [editor, masterYdoc, isSynced, connectionStatus])
+	}, [editor, masterYdoc, isSynced, connectionStatus, provider])
 
 	// Handle batch sync step (if supported by custom server)
 	// Note: Standard Hocuspocus server doesn't support BatchSyncStep messages.

@@ -66,13 +66,17 @@ const server = new Server({
         // 如果成功加载，返回已加载的文档
         return data.document;
       } else {
-        // 如果文档不存在，返回 null 表示创建新文档
-        return null;
+        // 如果文档不存在，使用模板数据初始化
+        console.log(`📝 文档不存在，使用模板数据初始化: ${data.documentName}`);
+        documentStorage.initializeTemplateData(data.document);
+        return data.document;
       }
     } catch (error) {
       console.error(`❌ 加载文档时出错: ${data.documentName}`, error);
-      // 出错时返回 null，创建新文档
-      return null;
+      // 出错时使用模板数据初始化
+      console.log(`📝 加载出错，使用模板数据初始化: ${data.documentName}`);
+      documentStorage.initializeTemplateData(data.document);
+      return data.document;
     }
   },
   async onStoreDocument(data) {

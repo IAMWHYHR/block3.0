@@ -141,14 +141,70 @@ export class MessageReceiver {
 		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
 		
 		// Apply updates to subdocuments
+		// Use SERVER_SYNC_ORIGIN to mark these updates as coming from server
+		const SERVER_SYNC_ORIGIN = provider.getServerSyncOrigin()
 		updatedDocuments.forEach(({ documentName, update }: { documentName: string; update: Uint8Array }) => {
-			const doc = subDocMap.get(documentName)
+			// documentName should be blockId (which equals subdoc.guid when client creates subdoc)
+			// Try to get doc from subDocMap using documentName as blockId
+			let doc = subDocMap.get(documentName)
+			
+			// If not found by blockId, try to find by GUID in subdocs
+			// This handles the case where subDocMap might not have the mapping yet
+			if (!doc) {
+				console.log(`🔍 Subdoc ${documentName} not found in subDocMap, searching in document.subdocs by GUID`)
+				provider.document.subdocs.forEach((childDoc) => {
+					if (childDoc.guid === documentName) {
+						doc = childDoc
+						console.log(`✅ Found subdoc by GUID: ${documentName}`)
+					}
+				})
+			}
+			
 			if (doc) {
 				try {
-					Y.applyUpdate(doc, update, provider)
+					// Check if doc is a valid Y.Doc instance
+					if (!(doc instanceof Y.Doc)) {
+						console.error(`❌ Invalid doc type for ${documentName}, expected Y.Doc, got:`, typeof doc, doc)
+						return
+					}
+					
+					// Check if doc is destroyed
+					if (doc.isDestroyed) {
+						console.error(`❌ Doc ${documentName} is destroyed`)
+						return
+					}
+					
+					// Ensure fragment is accessed before applying update
+					// This is necessary for observeDeep to work correctly
+					// Y.js needs the fragment to be accessed before it can trigger observeDeep events
+					// getXmlFragment should never return null - it creates the fragment if it doesn't exist
+					const fragment = doc.getXmlFragment('default')
+					
+					if (!fragment) {
+						console.error(`❌ getXmlFragment returned null for ${documentName}`)
+						console.error(`   doc type:`, typeof doc)
+						console.error(`   doc.constructor.name:`, doc.constructor?.name)
+						console.error(`   doc.share:`, doc.share)
+						console.error(`   doc.isDestroyed:`, doc.isDestroyed)
+						console.error(`   doc.guid:`, doc.guid)
+						return
+					}
+					
+					// Access fragment to ensure it's initialized (even if empty)
+					const fragmentLength = fragment.length // This triggers fragment initialization if needed
+					console.log(`🔍 Fragment accessed for ${documentName}, length: ${fragmentLength}`)
+					
+					// Now apply the update
+					Y.applyUpdate(doc, update, SERVER_SYNC_ORIGIN)
+					
+					console.log(`✅ Applied batch update to subdoc ${documentName}, fragment length after update: ${fragment.length}`)
 				} catch (error) {
 					console.error(`Caught error while handling a batch update for subdoc ${documentName}`, error)
 				}
+			} else {
+				console.warn(`⚠️ Subdoc ${documentName} not found in subDocMap or document.subdocs`)
+				console.warn(`   Available blockIds in subDocMap:`, Array.from(subDocMap.keys()))
+				console.warn(`   Available GUIDs in document.subdocs:`, Array.from(provider.document.subdocs).map(d => d.guid))
 			}
 		})
 
@@ -233,7 +289,9 @@ export class MessageReceiver {
 		
 		// Read and apply batch sync step 2 data
 		// readBatchSyncStep2 already applies updates to subdocuments
-		readBatchSyncStep2(message.decoder, subDocMap, provider)
+		// Use SERVER_SYNC_ORIGIN to mark these updates as coming from server
+		const SERVER_SYNC_ORIGIN = provider.getServerSyncOrigin()
+		readBatchSyncStep2(message.decoder, subDocMap, SERVER_SYNC_ORIGIN)
 	}
 
 	applySyncStatusMessage(provider: HocuspocusProvider, applied: boolean) {

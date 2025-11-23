@@ -13,18 +13,28 @@ export class BlockBinding {
 	public readonly editorView: EditorView
 	private readonly _observeFunction: (events: Y.YEvent<any>[], transaction: Y.Transaction) => void
 	private isDestroyed = false
+	// Reference to SERVER_SYNC_ORIGIN from provider to identify server-synced updates
+	private serverSyncOrigin: any = null
 
 	constructor(
 		childYdoc: Y.Doc,
 		blockNode: PModel.Node,
 		editorView: EditorView,
 		shouldSyncFromFragment: boolean = true,
+		serverSyncOrigin?: any,
 	) {
 		this.childYdoc = childYdoc
 		this.fragment = childYdoc.getXmlFragment('default')
 		this.blockNode = blockNode
 		this.editorView = editorView
+		this.serverSyncOrigin = serverSyncOrigin || null
 		this._observeFunction = this._fragmentChanged.bind(this)
+
+		// Ensure fragment is accessed/initialized before setting up observer
+		// This is important for observeDeep to work correctly
+		// Accessing fragment.length ensures it's initialized
+		const fragmentLength = this.fragment.length
+		console.log(`🔧 BlockBinding created for blockId: ${blockNode.attrs?.uuid}, fragment length: ${fragmentLength}`)
 
 		// Initialize: sync YXmlFragment to block node only if needed
 		// When block is created from master doc (master -> editor), we need to sync
@@ -34,7 +44,9 @@ export class BlockBinding {
 		}
 
 		// Listen to fragment changes
+		// Note: observeDeep must be set up AFTER fragment is accessed
 		this.fragment.observeDeep(this._observeFunction)
+		console.log(`👂 BlockBinding observeDeep listener registered for blockId: ${blockNode.attrs?.uuid}`)
 	}
 
 	/**
@@ -106,6 +118,11 @@ export class BlockBinding {
 		)
 
 		tr.replaceWith(blockNodeStart, blockNodeEnd, newBlockNode)
+		
+		// Mark this transaction as coming from Y.js sync to prevent circular updates
+		// This meta will be checked in _editorChanged to avoid sending updates back
+		tr.setMeta('yjsSync', true)
+		
 		this.editorView.dispatch(tr)
 	}
 
@@ -141,8 +158,25 @@ export class BlockBinding {
 		if (this.isDestroyed) return
 		if (events.length === 0) return
 
-		// Sync fragment to node
-		this._syncFragmentToNode()
+		console.log(`🔄 BlockBinding._fragmentChanged triggered, events: ${events.length}, origin:`, transaction.origin)
+
+		// Check if this update is from server sync
+		// Compare origin with serverSyncOrigin (which is a string constant)
+		const isServerSync = this.serverSyncOrigin && transaction.origin === this.serverSyncOrigin
+		
+		if (isServerSync) {
+			console.log(`📥 Server sync update detected, syncing fragment to node`)
+			// This is a server-synced update, we need to sync fragment to node
+			// but we should prevent any subsequent updates from being sent back to server
+			// The sync will update ProseMirror, but we don't want that to trigger
+			// sending updates back to server
+			this._syncFragmentToNode()
+		} else {
+			console.log(`📝 Local update detected, syncing fragment to node`)
+			// This is a local update (from editor or other local source)
+			// Sync fragment to node normally
+			this._syncFragmentToNode()
+		}
 	}
 
 	/**
@@ -168,6 +202,9 @@ export class BlockBinding {
 		}
 
 		const meta = { mapping: new Map(), isOMark: new Map() }
+		// Use SERVER_SYNC_ORIGIN if available to prevent circular updates when syncing from editor
+		// Note: This method is called from editor changes, so we use 'this' as origin
+		// But if we're in a server sync context, we should check if we should use SERVER_SYNC_ORIGIN
 		this.childYdoc.transact(() => {
 			// Ensure fragment has a single top-level YXmlElement corresponding to blockNode
 			const fragmentArray = this.fragment.toArray()
@@ -238,7 +275,7 @@ export class BlockBinding {
  * Helper function to create a ProseMirror node from a Y.XmlElement
  * Simplified version based on y-prosemirror's createNodeFromYElement
  */
-function createNodeFromYElement(
+export function createNodeFromYElement(
 	el: Y.XmlElement,
 	schema: PModel.Schema,
 	meta: { mapping: Map<any, any>; isOMark: Map<any, any> },
