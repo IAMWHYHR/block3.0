@@ -286,12 +286,19 @@ export class MessageReceiver {
 
 		// Get subdocuments from provider
 		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
+		console.log(`📥 applyBatchSyncStep2Message: subDocMap size: ${subDocMap.size}`)
+		console.log(`📥 applyBatchSyncStep2Message: subDocMap keys:`, Array.from(subDocMap.keys()))
+		console.log(`📥 applyBatchSyncStep2Message: document.subdocs size: ${provider.document.subdocs.size}`)
+		console.log(`📥 applyBatchSyncStep2Message: document.subdocs GUIDs:`, Array.from(provider.document.subdocs).map(d => d.guid))
 		
 		// Read and apply batch sync step 2 data
 		// readBatchSyncStep2 already applies updates to subdocuments
 		// Use SERVER_SYNC_ORIGIN to mark these updates as coming from server
 		const SERVER_SYNC_ORIGIN = provider.getServerSyncOrigin()
-		readBatchSyncStep2(message.decoder, subDocMap, SERVER_SYNC_ORIGIN)
+		
+		// 修改 readBatchSyncStep2 调用，传入 provider 以便在找不到文档时创建
+		const result = readBatchSyncStep2(message.decoder, subDocMap, SERVER_SYNC_ORIGIN, provider)
+		console.log(`📥 applyBatchSyncStep2Message: processed ${result.length} subdocs`)
 	}
 
 	applySyncStatusMessage(provider: HocuspocusProvider, applied: boolean) {

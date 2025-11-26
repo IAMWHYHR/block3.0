@@ -171,7 +171,7 @@ export const readBatchSyncStep1 = (decoder) => {
  * @param {any} transactionOrigin
  * @returns {Array<{documentName: string, update: Uint8Array}>} Array of subdocuments with their updates
  */
-export const readBatchSyncStep2 = (decoder, subDocMap, transactionOrigin) => {
+export const readBatchSyncStep2 = (decoder, subDocMap, transactionOrigin, provider = null) => {
   const subDocCount = decoding.readVarUint(decoder)
   const subDocs = []
   
@@ -179,12 +179,68 @@ export const readBatchSyncStep2 = (decoder, subDocMap, transactionOrigin) => {
     const documentName = decoding.readVarString(decoder)
     const update = decoding.readVarUint8Array(decoder)
     
-    const doc = subDocMap?.get(documentName)
+    let doc = subDocMap?.get(documentName)
+    
+    // 如果 subDocMap 中找不到，尝试从 document.subdocs 中查找
+    if (!doc && provider && provider.document) {
+      provider.document.subdocs.forEach((childDoc) => {
+        if (childDoc.guid === documentName) {
+          doc = childDoc
+        }
+      })
+    }
+    
+    // 如果仍然找不到，尝试从 dataMap 中获取
+    if (!doc && provider && provider.document) {
+      const dataMap = provider.document.getMap('data')
+      const value = dataMap.get(documentName)
+      if (value instanceof Y.Doc) {
+        doc = value
+      } else if (typeof value === 'string') {
+        // 如果是 GUID 字符串，从 subdocs 中查找
+        provider.document.subdocs.forEach((childDoc) => {
+          if (childDoc.guid === value) {
+            doc = childDoc
+          }
+        })
+      }
+    }
+    
+    // 如果仍然找不到，创建新的子文档
+    // 服务端发送的更新可能包含创建新文档所需的数据
+    if (!doc && provider && provider.document) {
+      console.log(`🆕 Creating new subdoc ${documentName} from batch sync step2`)
+      doc = new Y.Doc({ guid: documentName })
+      
+      // 将子文档添加到主文档的 subdocs
+      provider.document.subdocs.add(doc)
+      
+      // 将子文档存储到 dataMap
+      const dataMap = provider.document.getMap('data')
+      dataMap.set(documentName, doc)
+      
+      console.log(`✅ Created and added subdoc ${documentName} to document.subdocs and dataMap`)
+    }
+    
     if (doc) {
       try {
+        // 确保 fragment 被访问，以便 observeDeep 能正常工作
+        const fragment = doc.getXmlFragment('default')
+        const fragmentLengthBefore = fragment.length
+        
+        // 应用更新
         Y.applyUpdate(doc, update, transactionOrigin)
+        
+        const fragmentLengthAfter = fragment.length
+        console.log(`✅ Applied batch sync step2 update to subdoc ${documentName}, fragment length: ${fragmentLengthBefore} -> ${fragmentLengthAfter}`)
       } catch (error) {
         console.error(`Caught error while handling a Yjs update for subdoc ${documentName}`, error)
+      }
+    } else {
+      console.error(`❌ Could not find or create subdoc ${documentName}, update not applied`)
+      if (provider && provider.document) {
+        console.error(`   Available blockIds in dataMap:`, Array.from(provider.document.getMap('data').keys()))
+        console.error(`   Available GUIDs in subdocs:`, Array.from(provider.document.subdocs).map(d => d.guid))
       }
     }
     

@@ -6,6 +6,8 @@ import { UuidExtension } from './extensions/UuidExtension'
 import * as Y from 'yjs'
 import { HocuspocusProvider } from './hocuspocus/provider'
 import { MasterDocumentBinding } from './collaboration/MasterDocumentBinding'
+import { HocuspocusProviderWebsocket } from './hocuspocus/provider/HocuspocusProviderWebsocket'
+import { getYDocManager } from './masterChildDoc/ydoc-manager'
 
 type CollabEditorProps = {
 	roomName: string
@@ -23,12 +25,24 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 		return doc
 	}, [])
 
+	const socket = useMemo(() => {
+		return new HocuspocusProviderWebsocket({
+			url: host,
+		});
+	},[])
+	
 	// Create provider
 	const provider = useMemo(() => {
 		return new HocuspocusProvider({
 			url: host,
 			name: roomName,
 			document: masterYdoc,
+			onConnect: () => {
+				getYDocManager(masterYdoc).setCollaborationParamsAndSocket('', socket);
+			},
+			onSynced: () => {
+				getYDocManager(masterYdoc).syncWithOldData();
+			}
 		})
 	}, [host, roomName, masterYdoc])
 
@@ -46,23 +60,23 @@ export default function CollabEditor({ roomName, host, userName = 'Anonymous' }:
 
 		const handleStatus = (data: any) => {
 			console.log('连接状态变化:', data.status)
-			setConnectionStatus(data.status)
-			// 如果连接成功，检查同步状态
-			if (data.status === 'connected' || data.status === 'Connecting') {
-				// 检查 provider 的同步状态
-				if (provider.isSynced) {
-					setIsSynced(true)
-				}
-			}
+			// setConnectionStatus(data.status)
+			// // 如果连接成功，检查同步状态
+			// if (data.status === 'connected' || data.status === 'Connecting') {
+			// 	// 检查 provider 的同步状态
+			// 	if (provider.isSynced) {
+			// 		setIsSynced(true)
+			// 	}
+			// }
 		}
 
 		const handleConnect = () => {
 			console.log('✅ 已连接到服务器')
-			setConnectionStatus('connected')
-			// 连接成功后，检查同步状态
-			if (provider.isSynced) {
-				setIsSynced(true)
-			}
+			// setConnectionStatus('connected')
+			// // 连接成功后，检查同步状态
+			// if (provider.isSynced) {
+			// 	setIsSynced(true)
+			// }
 		}
 
 		const handleDisconnect = () => {

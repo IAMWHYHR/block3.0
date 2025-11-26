@@ -1,6 +1,8 @@
-import { Extension } from '@tiptap/core'
+import {Extension, removeDuplicates, findDuplicates} from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import {combineTransactionSteps, findChildrenInRange} from "@tiptap/react";
+import {getChangedRangesPlus, type NodeWithPos} from "./utils.ts";
 
 /**
  * 生成全局唯一的 UUID
@@ -26,6 +28,22 @@ function isBlockNode(node: ProseMirrorNode): boolean {
  */
 export const UuidExtension = Extension.create({
 	name: 'uuid',
+	
+	addOptions() {
+		return {
+			attributeName: 'uuid',
+			types: [
+				'paragraph',
+				'heading',
+				'blockquote',
+				'codeBlock',
+				'horizontalRule',
+				'orderedList',
+				'bulletList',
+				'listItem',
+			],
+		}
+	},
 
 	/**
 	 * 为所有 block 节点添加 uuid 属性
@@ -65,33 +83,65 @@ export const UuidExtension = Extension.create({
 	 * 添加插件来处理节点创建时的 UUID 分配
 	 */
 	addProseMirrorPlugins() {
+		const { types, attributeName } = this.options;
+		const typeSet = new Set<string>(types);
 		return [
 			new Plugin({
 				key: new PluginKey('uuid'),
-				appendTransaction(transactions, oldState, newState) {
-					// 检查是否有文档变更
-					if (!transactions.some((tr) => tr.docChanged)) {
-						return null
+				appendTransaction: (transactions, oldState, newState) => {
+					
+					// 协同更新，默认协同已处理数据
+					if (transactions.some((tr) => tr.getMeta('y-sync')?.isChangeOrigin)) return;
+					
+					const docChanges =
+						transactions.some((transaction) => transaction.docChanged) && !oldState.doc.eq(newState.doc);
+					
+					if (!docChanges) {
+						return;
 					}
-
-					let tr = null
-					let modified = false
-
-					// 遍历文档，为没有 UUID 的 block 节点分配 UUID
-					newState.doc.descendants((node, pos) => {
-						if (isBlockNode(node) && !node.attrs.uuid) {
-							if (!tr) {
-								tr = newState.tr
-							}
+					
+					const { tr } = newState;
+					const transform = combineTransactionSteps(oldState.doc, transactions);
+					const { mapping } = transform;
+					
+					const changes = getChangedRangesPlus(transform);
+					let newNodes: NodeWithPos[] = [];
+					
+					changes.forEach(({ newRange }) => {
+						newNodes = newNodes.concat(
+							findChildrenInRange(newState.doc, newRange, (node) => typeSet.has(node.type.name)),
+						);
+					});
+					newNodes = removeDuplicates(newNodes, ({ pos }) => pos + '');
+					
+					const newIds = newNodes.map(({ node }) => node.attrs[attributeName]).filter((id) => id !== null);
+					const duplicatedNewIds = findDuplicates(newIds);
+					
+					newNodes.forEach(({ node, pos }) => {
+						pos = tr.mapping.map(pos);
+						const id = tr.doc.nodeAt(pos)?.attrs[attributeName];
+						if (id === null || id.length === 0) {
 							tr.setNodeMarkup(pos, undefined, {
 								...node.attrs,
-								uuid: generateUUID(),
-							})
-							modified = true
+								[attributeName]: generateUUID(),
+							});
+							return;
 						}
-					})
-
-					return modified && tr ? tr : null
+						// check if the node doesn’t exist in the old state
+						const { deleted } = mapping.invert().mapResult(pos);
+						const newNode = deleted && duplicatedNewIds.includes(id);
+						if (newNode) {
+							tr.setNodeMarkup(pos, undefined, {
+								...node.attrs,
+								[attributeName]: generateUUID(),
+							});
+						}
+					});
+					
+					if (!tr.steps.length) {
+						return;
+					}
+					return tr;
 				},
 			}),
 		]
@@ -124,4 +174,3 @@ export const UuidExtension = Extension.create({
 		})
 	},
 })
-

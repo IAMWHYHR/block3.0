@@ -1,10 +1,10 @@
 import * as Y from 'yjs'
-import * as PModel from 'prosemirror-model'
 import { Editor } from '@tiptap/core'
-import { BlockBinding, createNodeFromYElement } from './BlockBinding.js'
+import { BlockBinding } from './BlockBinding.js'
 import { EditorView } from 'prosemirror-view'
-// @ts-ignore - y-prosemirror is a JS module
-import { createEmptyMeta } from '../y-prosemirror/plugins/sync-plugin.js'
+import {getYDocManager} from "../masterChildDoc/ydoc-manager.ts";
+// @ts-ignore
+import {prosemirrorToYXmlFragment} from "../y-prosemirror";
 
 /**
  * Master document structure:
@@ -20,336 +20,116 @@ export class MasterDocumentBinding {
 	private readonly indexMap: Y.Map<number>
 	private readonly dataMap: Y.Map<Y.Doc>
 	public readonly blockBindings: Map<string, BlockBinding> = new Map()
+	private readonly _observeFunction: (events: Y.YEvent<any>[], transaction: Y.Transaction) => void
 	private isDestroyed = false
-	private isFirstSync = true
-	private observeDeepHandler: ((events: Y.YEvent<any>[], transaction: Y.Transaction) => void) | null = null
-	// Reference to SERVER_SYNC_ORIGIN to identify server-synced updates
-	private serverSyncOrigin: any = null
+	private isInitializing = true
+	private syncTimeout: ReturnType<typeof setTimeout> | null = null
 
-	constructor(masterYdoc: Y.Doc, editor: Editor, serverSyncOrigin?: any) {
+	constructor(masterYdoc: Y.Doc, editor: Editor) {
 		this.masterYdoc = masterYdoc
 		this.editor = editor
 		this.editorView = editor.view
-		this.serverSyncOrigin = serverSyncOrigin || null
 
 		// Initialize maps
 		this.indexMap = masterYdoc.getMap('index')
 		this.dataMap = masterYdoc.getMap('data')
 
-		// Initial sync - full document replacement on first sync
-		// Delay to next event loop to avoid React setState during render
-		setTimeout(() => {
-			this._initialFullSync()
-		}, 0)
+		this._observeFunction = this._masterDocChanged.bind(this)
 
-		// Listen to master document changes using observeDeep
-		this._setupObserveDeep()
+		// Listen to master document changes
+		this.indexMap.observeDeep(this._observeFunction)
+
+		// Initial sync
+		this._syncMasterToEditor()
+
+		// Mark initialization as complete after a delay
+		// This allows the initial sync to complete before handling changes
+		setTimeout(() => {
+			this.isInitializing = false
+			console.log('✅ MasterDocumentBinding initialization complete')
+		}, 1000)
 
 		// Listen to editor changes
-		// ProseMirror's update event passes { view, state, oldState, transaction }
-		this.editor.on('update', ({ transaction }: { transaction?: any }) => {
-			this._editorChanged({ transaction })
-		})
+		this.editor.on('update', this._editorChanged.bind(this))
 	}
 
 	/**
-	 * Initial full sync - convert collaborative data to ProseMirror and replace entire document
-	 */
-	private _initialFullSync() {
-		if (this.isDestroyed) return
-
-		console.log('🔄 开始初始全量同步...')
-
-		// Get all blocks from master document, sorted by index
-		const blocks: Array<{ blockId: string; index: number; childYdoc: Y.Doc }> = []
-		this.indexMap.forEach((index, blockId) => {
-			const childYdoc = this.dataMap.get(blockId) as Y.Doc | undefined
-			if (childYdoc instanceof Y.Doc) {
-				blocks.push({ blockId, index, childYdoc })
-			} else if (typeof childYdoc === 'string') {
-				// If Y.js serialized to GUID, find in subdocs
-				this.masterYdoc.subdocs.forEach((doc) => {
-					if (doc.guid === childYdoc) {
-						blocks.push({ blockId, index, childYdoc: doc })
-					}
-				})
-			}
-		})
-
-		// Sort by index
-		blocks.sort((a, b) => a.index - b.index)
-
-		if (blocks.length === 0) {
-			console.log('⚠️ 没有找到任何块，跳过初始同步')
-			this.isFirstSync = false
-			return
-		}
-
-		// Convert each childYdoc's YXmlFragment to ProseMirror nodes
-		const schema = this.editorView.state.schema
-		const meta = createEmptyMeta()
-		const fragmentContent: PModel.Node[] = []
-
-		for (const { blockId, childYdoc } of blocks) {
-			// Load child doc if not loaded
-			if (!childYdoc.isLoaded) {
-				childYdoc.load()
-			}
-
-			// Get YXmlFragment from childYdoc
-			const fragment = childYdoc.getXmlFragment('default')
-			const fragmentArray = fragment.toArray()
-
-			// Find the top-level YXmlElement (should be the block node)
-			let topLevelElement: Y.XmlElement | null = null
-			for (const item of fragmentArray) {
-				if (item instanceof Y.XmlElement) {
-					topLevelElement = item
-					break
-				}
-			}
-
-			if (topLevelElement) {
-				// Convert YXmlElement to ProseMirror node
-				const node = createNodeFromYElement(
-					topLevelElement,
-					schema,
-					meta
-				)
-
-				if (node) {
-					fragmentContent.push(node)
-				} else {
-					console.warn(`⚠️ 无法转换块 ${blockId} 为 ProseMirror 节点`)
-				}
-			} else {
-				console.warn(`⚠️ 块 ${blockId} 的 YXmlFragment 中没有找到顶层元素`)
-			}
-		}
-
-		if (fragmentContent.length === 0) {
-			console.log('⚠️ 没有可用的内容，跳过初始同步')
-			this.isFirstSync = false
-			return
-		}
-
-		// Replace entire document content (similar to sync-plugin.js _forceRerender)
-		const tr = this.editorView.state.tr.replace(
-			0,
-			this.editorView.state.doc.content.size,
-			new PModel.Slice(PModel.Fragment.from(fragmentContent), 0, 0)
-		)
-
-		// Dispatch transaction
-		this.editorView.dispatch(tr)
-
-		console.log(`✅ 初始全量同步完成，替换了 ${fragmentContent.length} 个块`)
-
-		// Create block bindings for all blocks
-		for (const { blockId, childYdoc } of blocks) {
-			// Find the corresponding block node in the editor
-			let blockNode: PModel.Node | null = null
-			this._traverseEditorDoc((node) => {
-				if (node.attrs && node.attrs.uuid === blockId) {
-					blockNode = node
-				}
-			})
-
-			if (blockNode) {
-				this._createBlockBinding(blockId, childYdoc, blockNode, false) // false = don't sync from fragment, editor already has latest
-			} else {
-				console.warn(`⚠️ 无法找到块 ${blockId} 对应的编辑器节点`)
-			}
-		}
-
-		this.isFirstSync = false
-	}
-
-	/**
-	 * Setup observeDeep to listen to master document changes
-	 */
-	private _setupObserveDeep() {
-		if (this.isDestroyed) return
-
-		this.observeDeepHandler = (events: Y.YEvent<any>[], transaction: Y.Transaction) => {
-			if (this.isDestroyed) return
-			if (this.isFirstSync) return // Skip during initial sync
-
-			// Handle master document changes
-			this._masterDocChanged(events, transaction)
-		}
-
-		// Observe deep changes on indexMap and dataMap
-		// observeDeep is a method on AbstractType (which Y.Map extends)
-		;(this.indexMap as any).observeDeep(this.observeDeepHandler)
-		;(this.dataMap as any).observeDeep(this.observeDeepHandler)
-	}
-
-	/**
-	 * Sync master document to editor (incremental updates after initial sync)
+	 * Sync master document to editor
 	 */
 	private _syncMasterToEditor() {
 		if (this.isDestroyed) return
-		if (this.isFirstSync) return // Skip during initial sync
-
-		// Get all block IDs from master document
-		const masterBlockIds = new Set<string>()
-		this.indexMap.forEach((index, blockId) => {
-			masterBlockIds.add(blockId)
-		})
-
-		// Get all block IDs from editor
-		const editorBlockIds = new Set<string>()
-		this._traverseEditorDoc((node, pos) => {
-			if (node.attrs && node.attrs.uuid) {
-				editorBlockIds.add(node.attrs.uuid)
-			}
-		})
-
-		// Diff: blocks in master but not in editor
-		for (const blockId of masterBlockIds) {
-			if (!editorBlockIds.has(blockId)) {
-				this._createBlockFromMaster(blockId)
-			}
+		
+		// 获取所有 childDocId
+		const indices = getYDocManager(this.masterYdoc).getIndex()
+		console.log(`🔄 _syncMasterToEditor called, found ${indices.length} blocks`)
+		
+		// 如果数据为空，可能是还在同步中，不执行同步
+		if (indices.length === 0) {
+			console.log(`⚠️ _syncMasterToEditor: no blocks found, skipping sync (may be still syncing)`)
+			return
 		}
-
-		// Diff: blocks in editor but not in master
-		for (const blockId of editorBlockIds) {
-			if (!masterBlockIds.has(blockId)) {
-				// This will be handled by _editorChanged when user creates a new block
-			}
-		}
+		
+		// 遍历创建 block
+		indices.forEach(s => this._createBlockFromMaster(s))
 	}
 
 	/**
 	 * Create a block in editor from master document
 	 */
-	private _createBlockFromMaster(blockId: string) {
+	private _createBlockFromMaster({uuid, index}: {uuid:string, index:string}) {
 		if (this.isDestroyed) return
-
-		console.log(`🔄 _createBlockFromMaster called for blockId: ${blockId}`)
-
-		const childYdoc = this.dataMap.get(blockId)
-		if (!childYdoc) {
-			// Child doc doesn't exist yet, create placeholder
-			console.log(`⚠️ ChildYdoc not found for blockId: ${blockId}, creating placeholder`)
-			this._createPlaceholderBlock(blockId)
-			return
-		}
-
-		console.log(`✅ Found childYdoc for blockId: ${blockId}`)
-
-		// Create placeholder block node
-		const placeholderNode = this._createPlaceholderBlock(blockId)
-		if (!placeholderNode) {
-			console.error(`❌ Failed to create placeholder block for blockId: ${blockId}`)
-			return
-		}
-
-		console.log(`✅ Created placeholder block node with uuid: ${placeholderNode.attrs?.uuid}`)
-
-		// Load child doc if not loaded
+		console.log(`🔄 _createBlockFromMaster called for blockId: ${uuid}`)
+		const childYdoc = getYDocManager(this.masterYdoc).getSubDoc(uuid);
+		if(!childYdoc) return;
+		
+		// 尝试加载子文档（如果还未加载）
+		// 注意：即使 isLoaded 为 false，如果 fragment 有内容，BlockBinding 也会同步
 		if (!childYdoc.isLoaded) {
-			childYdoc.load()
+			try {
+				childYdoc.load()
+				console.log(`📥 Loaded childYdoc for blockId: ${uuid}`)
+			} catch (error) {
+				console.warn(`⚠️ Failed to load childYdoc for blockId: ${uuid}`, error)
+				// 继续执行，BlockBinding 会检查 fragment 内容
+			}
 		}
-
-		// Create binding with sync from fragment (master -> editor)
-		// When master doc has new childYdoc but editor doesn't have the node,
-		// we need to sync YXmlFragment content to the editor node
-		this._createBlockBinding(blockId, childYdoc, placeholderNode, true)
+		
+		this._createBlockBinding(uuid, childYdoc, true, index)
 	}
-
-	/**
-	 * Create a placeholder block node in editor
-	 */
-	private _createPlaceholderBlock(blockId: string): any {
-		const schema = this.editor.schema
-		const paragraph = schema.nodes.paragraph
-
-		if (!paragraph) {
-			console.error('Paragraph node type not found in schema')
-			return null
-		}
-
-		// Create placeholder node with uuid attribute
-		const placeholderNode = paragraph.create(
-			{ uuid: blockId },
-			schema.text('Loading...'),
-		)
-
-		// Insert at the end of document
-		const tr = this.editorView.state.tr
-		const docSize = this.editorView.state.doc.content.size
-		tr.insert(docSize, placeholderNode)
-		this.editorView.dispatch(tr)
-
-		return placeholderNode
-	}
-
+	
 	/**
 	 * Create binding between child doc and block node
+	 * @param blockId
+	 * @param childYdoc
+	 * @param blockNode
 	 * @param shouldSyncFromFragment - If true, sync YXmlFragment to block node (master -> editor)
 	 *                                  If false, skip sync (editor -> master, editor node is already latest)
+	 * @param index
 	 */
 	private _createBlockBinding(
 		blockId: string,
 		childYdoc: Y.Doc,
-		blockNode: any,
-		shouldSyncFromFragment: boolean = true,
+		shouldSyncFromFragment: boolean = false,
+		index: string,
 	) {
 		if (this.isDestroyed) return
 		if (this.blockBindings.has(blockId)) {
-			// Binding already exists
 			console.log(`⚠️ BlockBinding already exists for blockId: ${blockId}`)
 			return
 		}
-
-		// First, try to use the provided blockNode if it has the correct uuid
-		let actualBlockNode: any = null
-		if (blockNode && blockNode.attrs && blockNode.attrs.uuid === blockId) {
-			// Verify the node exists in the document by finding it
-			this._traverseEditorDoc((node) => {
-				if (node.attrs && node.attrs.uuid === blockId) {
-					actualBlockNode = node
-				}
-			})
-		}
-
-		// If not found, search for it in the document
-		if (!actualBlockNode) {
-			this._traverseEditorDoc((node) => {
-				if (node.attrs && node.attrs.uuid === blockId) {
-					actualBlockNode = node
-				}
-			})
-		}
-
-		if (!actualBlockNode) {
-			console.error(`❌ Block node with uuid ${blockId} not found in editor`)
-			console.log('Available block nodes in editor:')
-			this._traverseEditorDoc((node) => {
-				if (node.attrs && node.attrs.uuid) {
-					console.log(`  - uuid: ${node.attrs.uuid}, type: ${node.type.name}`)
-				}
-			})
-			console.log('Available block IDs in masterYdoc:', Array.from(this.indexMap.keys()))
-			console.log('Available childYdocs in masterYdoc:', Array.from(this.dataMap.keys()))
-			return
-		}
-
+		
 		const binding = new BlockBinding(
 			childYdoc,
-			actualBlockNode,
+			blockId,
 			this.editorView,
 			shouldSyncFromFragment,
-			this.serverSyncOrigin,
+			index,
+			this.editor,
+			this.masterYdoc,
 		)
 		this.blockBindings.set(blockId, binding)
 		console.log(`✅ Created BlockBinding for blockId: ${blockId}, total bindings: ${this.blockBindings.size}`)
-		console.log(`🔍 blockBindings Map reference:`, this.blockBindings)
-		console.log(`🔍 blockBindings entries:`, Array.from(this.blockBindings.entries()))
 		
-		// Force update window reference to ensure it's always current
 		if ((window as any).collabEditor) {
 			;(window as any).collabEditor.masterYdocBinding = this
 			console.log(`✅ Updated window.collabEditor.masterYdocBinding reference`)
@@ -359,21 +139,36 @@ export class MasterDocumentBinding {
 	/**
 	 * Handle master document changes
 	 */
-	private _masterDocChanged(events: Y.YEvent<any>[], transaction: Y.Transaction) {
+	private _masterDocChanged() {
 		if (this.isDestroyed) return
-		// Re-sync when master document changes
-		this._syncMasterToEditor()
+		
+		// 在初始化期间，避免频繁触发同步
+		// 只在初始化完成后才响应变化
+		if (this.isInitializing) {
+			console.log(`⚠️ _masterDocChanged: still initializing, skipping sync`)
+			return
+		}
+		
+		// 使用防抖，避免频繁同步
+		if (this.syncTimeout) {
+			clearTimeout(this.syncTimeout)
+		}
+		
+		this.syncTimeout = setTimeout(() => {
+			this._syncMasterToEditor()
+		}, 100)
 	}
 
 	/**
 	 * Handle editor changes
 	 */
-	private _editorChanged({ transaction }: { transaction?: any } = {}) {
+	private _editorChanged() {
 		if (this.isDestroyed) return
 		
-		// Check if this change is from Y.js sync (server sync)
-		// If so, don't process it to avoid circular updates
-		if (transaction && transaction.getMeta && transaction.getMeta('yjsSync')) {
+		// 在初始化期间，避免处理编辑器变化
+		// 因为此时编辑器可能还没有内容，会导致误判删除
+		if (this.isInitializing) {
+			console.log(`⚠️ _editorChanged: still initializing, skipping editor change handling`)
 			return
 		}
 
@@ -387,9 +182,19 @@ export class MasterDocumentBinding {
 
 		// Get master block IDs
 		const masterBlockIds = new Set<string>()
-		this.indexMap.forEach((index, blockId) => {
+		this.indexMap.forEach((_, blockId) => {
 			masterBlockIds.add(blockId)
 		})
+
+		// 如果 master 中没有任何 block，可能是还在同步中，不处理删除
+		if (masterBlockIds.size === 0) {
+			console.log(`⚠️ _editorChanged: master has no blocks, skipping diff (may be still syncing)`)
+			// 只处理新增的 block
+			for (const blockId of editorBlockIds) {
+				this._handleNewBlock(blockId)
+			}
+			return
+		}
 
 		// Diff: new blocks in editor
 		for (const blockId of editorBlockIds) {
@@ -399,18 +204,24 @@ export class MasterDocumentBinding {
 		}
 
 		// Diff: deleted blocks
-		for (const blockId of masterBlockIds) {
-			if (!editorBlockIds.has(blockId)) {
-				this._handleDeletedBlock(blockId)
+		// 只有在 master 有数据且编辑器有数据时才处理删除
+		// 避免在初始化期间误判删除
+		if (editorBlockIds.size > 0) {
+			for (const blockId of masterBlockIds) {
+				if (!editorBlockIds.has(blockId)) {
+					this._handleDeletedBlock(blockId)
+				}
 			}
 		}
 
 		// Diff: modified blocks
-		for (const blockId of editorBlockIds) {
-			if (masterBlockIds.has(blockId)) {
-				this._handleModifiedBlock(blockId)
+		this.masterYdoc.transact(()=>{
+			for (const blockId of editorBlockIds) {
+				if (masterBlockIds.has(blockId)) {
+					this._handleModifiedBlock(blockId)
+				}
 			}
-		}
+		}, this)
 	}
 
 	/**
@@ -430,39 +241,26 @@ export class MasterDocumentBinding {
 		if (!blockNode) return
 
 		// Create new child doc
-		const childYdoc = new Y.Doc({ guid: blockId })
+		let childYdoc = getYDocManager(this.masterYdoc).getSubDoc( blockId );
+		if (!childYdoc) {
+			childYdoc = new Y.Doc({ guid: blockId });
+		}
 		const fragment = childYdoc.getXmlFragment('default')
 
 		// Initialize fragment: create a single top-level YXmlElement
-		const meta = { mapping: new Map(), isOMark: new Map() }
 		childYdoc.transact(() => {
-			// Create YXmlElement with blockNode.type.name as nodeName
-			const xmlElement = new Y.XmlElement(blockNode.type.name)
-			
-			// Convert block node attributes and children to YXmlElement
-			this._prosemirrorNodeToYXmlFragment(blockNode, xmlElement, meta)
-			
-			// Insert the YXmlElement into fragment (ensuring only one top-level element)
-			fragment.insert(0, [xmlElement])
+			prosemirrorToYXmlFragment(blockNode, fragment)
 		}, this)
 
 		// Add to master document
-		// 注意：先设置 dataMap，再添加 subdocs，避免触发 subdocsHandler 时 dataMap 还没有更新
 		const index = this.indexMap.size
 		this.masterYdoc.transact(() => {
 			this.indexMap.set(blockId, index)
-			this.dataMap.set(blockId, childYdoc)
+			this.masterYdoc.getMap('data').set(blockId, childYdoc);
+			childYdoc.load()
 		}, this)
 		
-		// 在事务外添加 subdocs，避免在事务中触发 subdocs 事件
-		// 这样主文档的更新会先同步，然后再触发 subdocs 事件
-		this.masterYdoc.subdocs.add(childYdoc)
-		childYdoc.load()
-
-		// Create binding without sync from fragment (editor -> master)
-		// When editor has new node but master doc doesn't have it,
-		// editor node is already the latest, so no need to sync from fragment
-		this._createBlockBinding(blockId, childYdoc, blockNode, false)
+		this._createBlockBinding(blockId, childYdoc, false, '0')
 	}
 
 	/**
@@ -497,20 +295,10 @@ export class MasterDocumentBinding {
 
 		const binding = this.blockBindings.get(blockId)
 		if (!binding) return
-
-		// Find the updated block node
-		let blockNode: any = null
-		this._traverseEditorDoc((node) => {
-			if (node.attrs && node.attrs.uuid === blockId) {
-				blockNode = node
-			}
-		})
-
-		if (!blockNode) return
-
+		
 		// Update YXmlFragment from the new block node
 		// Pass the new blockNode to ensure we use the latest node reference
-		binding.updateYXmlFragment(blockNode)
+		binding.updateYXmlFragment()
 	}
 
 	/**
@@ -535,69 +323,7 @@ export class MasterDocumentBinding {
 		})
 	}
 
-	/**
-	 * Convert ProseMirror node to YXmlElement
-	 * Updates the YXmlElement with node attributes and children
-	 */
-	private _prosemirrorNodeToYXmlFragment(
-		node: any,
-		xmlElement: Y.XmlElement,
-		meta: { mapping: Map<any, any>; isOMark: Map<any, any> },
-	) {
-		// Update YXmlElement attributes from node attributes
-		for (const key in node.attrs) {
-			if (node.attrs[key] !== null && node.attrs[key] !== undefined) {
-				xmlElement.setAttribute(key, String(node.attrs[key]))
-			}
-		}
-
-		// Clear existing content to ensure clean update
-		xmlElement.delete(0, xmlElement.length)
-
-		// Process children (block nodes should have children, not be text nodes)
-		if (node.isText) {
-			// This branch should not be reached for block nodes,
-			// but kept for robustness when processing inline text nodes
-			const text = new Y.XmlText()
-			if (node.text) {
-				text.insert(0, node.text)
-			}
-			// Apply marks as formatting attributes on the text
-			if (node.marks && node.marks.length > 0) {
-				node.marks.forEach((mark: any) => {
-					const markAttrs = mark.attrs || {}
-					text.format(0, text.length, { [mark.type.name]: markAttrs })
-				})
-			}
-			xmlElement.insert(0, [text])
-		} else {
-			// For block/inline nodes, recursively process children
-			node.forEach((child: any) => {
-				if (child.isText) {
-					// Handle text child nodes
-					const text = new Y.XmlText()
-					if (child.text) {
-						text.insert(0, child.text)
-					}
-					// Apply marks as formatting attributes
-					if (child.marks && child.marks.length > 0) {
-						child.marks.forEach((mark: any) => {
-							const markAttrs = mark.attrs || {}
-							text.format(0, text.length, { [mark.type.name]: markAttrs })
-						})
-					}
-					xmlElement.insert(xmlElement.length, [text])
-				} else {
-					// Handle block/inline child nodes
-					const childElement = new Y.XmlElement(child.type.name)
-					// Recursively process child node to update its attributes and children
-					this._prosemirrorNodeToYXmlFragment(child, childElement, meta)
-					xmlElement.insert(xmlElement.length, [childElement])
-				}
-			})
-		}
-	}
-
+	
 	/**
 	 * Get all block bindings
 	 */
@@ -618,22 +344,19 @@ export class MasterDocumentBinding {
 	public destroy() {
 		if (this.isDestroyed) return
 		this.isDestroyed = true
-
-		// Destroy all block bindings
+		
+		if (this.syncTimeout) {
+			clearTimeout(this.syncTimeout)
+			this.syncTimeout = null
+		}
+		
 		for (const binding of this.blockBindings.values()) {
 			binding.destroy()
 		}
 		this.blockBindings.clear()
-
-		// Remove observers
-		if (this.observeDeepHandler) {
-			;(this.indexMap as any).unobserveDeep(this.observeDeepHandler)
-			;(this.dataMap as any).unobserveDeep(this.observeDeepHandler)
-			this.observeDeepHandler = null
-		}
-
-		// Remove editor listener
+		
+		;(this.indexMap as any).unobserveDeep(this._observeFunction)
+		
 		this.editor.off('update', this._editorChanged.bind(this))
 	}
 }
-
