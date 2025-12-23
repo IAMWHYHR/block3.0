@@ -656,18 +656,28 @@ export class HocuspocusProvider extends EventEmitter {
 	 * Collects subdoc updates and sends them as BatchUpdateMessage to the server
 	 */
 	private handleUpdateChildYdoc(subdocId: string, update: Uint8Array) {
-		// Store the update
+		// Store the latest update for this subdoc.
+		// 如果同一个 subdoc 在一个批次窗口内多次更新，只保留最后一次，减少网络压力。
 		this.pendingBatchUpdates.set(subdocId, update)
 
-		// Clear existing timeout
-		if (this.batchUpdateTimeout) {
-			clearTimeout(this.batchUpdateTimeout)
-		}
+		// 以前这里使用的是“防抖”策略：每次更新都会重置定时器。
+		// 在持续高速输入时，定时器会一直被重置，从而导致 sendBatchUpdate 永远不会被调用，
+		// 子文档的更新就一直滞留在 pendingBatchUpdates 中，无法发送给服务端。
+		//
+		// 为了解决这个问题，这里改为“节流”策略：
+		// - 如果当前已经有一个定时器在等待发送，就不再重置它；
+		// - 定时器到期时发送一次批量更新，并清空定时器标记；
+		// - 如果在发送之后又有新的更新到来，会再启动下一轮定时器。
+		// 这样可以保证在持续输入时，仍然会以固定的时间间隔发送更新，而不是一直不发。
+		if (!this.batchUpdateTimeout) {
+			this.batchUpdateTimeout = setTimeout(() => {
+				this.sendBatchUpdate()
+				this.batchUpdateTimeout = null
 
-		// Schedule batch update send with debounce
-		this.batchUpdateTimeout = setTimeout(() => {
-			this.sendBatchUpdate()
-		}, this.BATCH_UPDATE_DEBOUNCE_MS)
+				// 如果在 sendBatchUpdate 执行过程中又产生了新的 pendingBatchUpdates，
+				// 下一次 handleUpdateChildYdoc 被调用时会重新启动一个新的定时器。
+			}, this.BATCH_UPDATE_DEBOUNCE_MS)
+		}
 	}
 
 	/**

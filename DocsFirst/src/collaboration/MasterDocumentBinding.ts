@@ -43,10 +43,21 @@ export class MasterDocumentBinding {
 		this._syncMasterToEditor()
 
 		// Mark initialization as complete after a delay
-		// This allows the initial sync to complete before handling changes
+		// 这里有一个重要的时序问题：
+		// - MasterDocumentBinding 构造时就调用了一次 _syncMasterToEditor()
+		// - 但此时主文档很可能还在和服务器做首次同步，index 还是空的
+		// - 同步完成后，indexMap 会在这段“初始化窗口期”内发生变化
+		// - 由于 isInitializing = true，_masterDocChanged 会直接跳过这些变化
+		//   导致远端已经有的 block 没有在本地创建 BlockBinding
+		//   之后即使子文档通过 BatchUpdate 收到了内容，也没有绑定到编辑器上，看起来就像“这块一直不同步”
+		//
+		// 为了解决这个问题，初始化结束时再补跑一次 _syncMasterToEditor()，
+		// 确保此刻 masterYdoc.index 里的所有 block 都会被创建并绑定。
 		setTimeout(() => {
+			if (this.isDestroyed) return
 			this.isInitializing = false
-			console.log('✅ MasterDocumentBinding initialization complete')
+			console.log('✅ MasterDocumentBinding initialization complete, running final sync from master to editor')
+			this._syncMasterToEditor()
 		}, 1000)
 
 		// Listen to editor changes

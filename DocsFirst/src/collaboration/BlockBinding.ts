@@ -4,7 +4,7 @@ import { EditorView } from 'prosemirror-view'
 import {Editor} from "@tiptap/core";
 import {getYDocManager} from "../masterChildDoc/ydoc-manager.ts";
 // @ts-ignore
-import {prosemirrorToYXmlFragment} from "../y-prosemirror";
+import {prosemirrorToYXmlFragment, prosemirrorJSONToYXmlFragment} from "../y-prosemirror";
 import {yXmlFragmentToProsemirrorJSON} from "y-prosemirror";
 
 /**
@@ -262,7 +262,7 @@ export class BlockBinding {
 		
 		this.childYdoc.transact(() => {
 			try {
-				prosemirrorToYXmlFragment(blockNode, this.fragment)
+				prosemirrorJSONToYXmlFragment(this.editor.schema, {type:'doc', content: [blockNode.toJSON(),]}, this.fragment)
 			} catch (error) {
 				console.error('❌ updateYFragment error:', error)
 				throw error

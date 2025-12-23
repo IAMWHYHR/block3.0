@@ -1,7 +1,8 @@
 import { Plugin } from 'prosemirror-state'
 
 import { getRelativeSelection } from './sync-plugin.js'
-import { UndoManager, Item, ContentType, XmlElement, Text } from 'yjs'
+import { Item, ContentType, XmlElement, Text } from 'yjs'
+import YMultiDocUndoManager from '../y-multidoc-undomanager.ts'
 import { yUndoPluginKey, ySyncPluginKey } from './keys.js'
 
 export const undo = state => yUndoPluginKey.getState(state)?.undoManager?.undo() != null
@@ -22,7 +23,7 @@ export const yUndoPlugin = ({ protectedNodes = defaultProtectedNodes, trackedOri
   state: {
     init: (initargs, state) => {
       const ystate = ySyncPluginKey.getState(state)
-      const _undoManager = undoManager || new UndoManager(ystate.type, {
+      const _undoManager = undoManager || new YMultiDocUndoManager(ystate.doc, {
         trackedOrigins: new Set([ySyncPluginKey].concat(trackedOrigins)),
         deleteFilter: (item) => defaultDeleteFilter(item, protectedNodes),
         captureTransaction: tr => tr.meta.get('addToHistory') !== false

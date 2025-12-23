@@ -137,76 +137,102 @@ export class MessageReceiver {
 		// Read batch update data
 		const updatedDocuments = readBatchUpdate(message.decoder)
 
-		// Get subdocuments from provider
+		// Get subdocuments from provider（主文档中的子文档映射）
 		const subDocMap = provider.getSubDocMap?.() || new Map<string, Y.Doc>()
-		
+		const dataMap = provider.document.getMap("data") as Y.Map<Y.Doc | string>
+
 		// Apply updates to subdocuments
 		// Use SERVER_SYNC_ORIGIN to mark these updates as coming from server
 		const SERVER_SYNC_ORIGIN = provider.getServerSyncOrigin()
-		updatedDocuments.forEach(({ documentName, update }: { documentName: string; update: Uint8Array }) => {
-			// documentName should be blockId (which equals subdoc.guid when client creates subdoc)
-			// Try to get doc from subDocMap using documentName as blockId
-			let doc = subDocMap.get(documentName)
-			
-			// If not found by blockId, try to find by GUID in subdocs
-			// This handles the case where subDocMap might not have the mapping yet
-			if (!doc) {
-				console.log(`🔍 Subdoc ${documentName} not found in subDocMap, searching in document.subdocs by GUID`)
-				provider.document.subdocs.forEach((childDoc) => {
-					if (childDoc.guid === documentName) {
-						doc = childDoc
-						console.log(`✅ Found subdoc by GUID: ${documentName}`)
+
+		updatedDocuments.forEach(
+			({ documentName, update }: { documentName: string; update: Uint8Array }) => {
+				// documentName 应该是 blockId（客户端创建子文档时使用 blockId 作为 guid）
+				// 1. 优先从 subDocMap 中按 blockId 取
+				let doc = subDocMap.get(documentName)
+
+				// 2. 如果 subDocMap 中没有，尝试从 dataMap + document.subdocs 中恢复
+				if (!doc) {
+					const stored = dataMap.get(documentName)
+
+					// dataMap 里可能存的是 Y.Doc，也可能是 guid 字符串
+					if (stored instanceof Y.Doc) {
+						doc = stored
+					} else if (typeof stored === "string") {
+						// 如果是 guid 字符串，则在 subdocs 中查找匹配的子文档
+						provider.document.subdocs.forEach((childDoc) => {
+							if (childDoc.guid === stored) {
+                                doc = childDoc
+							}
+						})
 					}
-				})
-			}
-			
-			if (doc) {
+				}
+
+				// 3. 如果还是没找到，主动创建一个新的子文档并挂到主文档上
+				if (!doc) {
+					console.log(
+						`🆕 Subdoc ${documentName} not found locally, creating new Y.Doc and attaching to master document`,
+					)
+
+					// 使用 documentName 作为 guid，保持与客户端/服务端约定一致
+					doc = new Y.Doc({ guid: documentName })
+
+					// 将新建子文档挂载到 master 文档：
+					// - 加入 subdocs 集合，保证 Y.js 能正确追踪子文档
+					// - 写入 dataMap，方便之后通过 blockId 查找
+					provider.document.subdocs.add(doc)
+					dataMap.set(documentName, doc)
+
+					// 尝试触发加载（若环境支持 load 方法）
+					if (typeof (doc as any).load === "function") {
+						try {
+							;(doc as any).load()
+						} catch {
+							// 忽略 load 失败，后续更新仍然可以应用
+						}
+					}
+
+					// 更新 subDocMap，避免同一批次后续文档再次走创建逻辑
+					subDocMap.set(documentName, doc)
+				}
+
+				// 4. 此时 doc 一定存在，开始应用更新
 				try {
-					// Check if doc is a valid Y.Doc instance
 					if (!(doc instanceof Y.Doc)) {
-						console.error(`❌ Invalid doc type for ${documentName}, expected Y.Doc, got:`, typeof doc, doc)
+						console.error(
+							`❌ Invalid doc type for ${documentName}, expected Y.Doc, got:`,
+							typeof doc,
+							doc,
+						)
 						return
 					}
-					
-					// Check if doc is destroyed
+
 					if (doc.isDestroyed) {
 						console.error(`❌ Doc ${documentName} is destroyed`)
 						return
 					}
-					
-					// Ensure fragment is accessed before applying update
-					// This is necessary for observeDeep to work correctly
-					// Y.js needs the fragment to be accessed before it can trigger observeDeep events
-					// getXmlFragment should never return null - it creates the fragment if it doesn't exist
-					const fragment = doc.getXmlFragment('default')
-					
-					if (!fragment) {
-						console.error(`❌ getXmlFragment returned null for ${documentName}`)
-						console.error(`   doc type:`, typeof doc)
-						console.error(`   doc.constructor.name:`, doc.constructor?.name)
-						console.error(`   doc.share:`, doc.share)
-						console.error(`   doc.isDestroyed:`, doc.isDestroyed)
-						console.error(`   doc.guid:`, doc.guid)
-						return
-					}
-					
-					// Access fragment to ensure it's initialized (even if empty)
-					const fragmentLength = fragment.length // This triggers fragment initialization if needed
-					console.log(`🔍 Fragment accessed for ${documentName}, length: ${fragmentLength}`)
-					
-					// Now apply the update
+
+					// 先访问 fragment，确保其被初始化，observeDeep 监听才能正确工作
+					const fragment = doc.getXmlFragment("default")
+					const fragmentLength = fragment.length
+					console.log(
+						`🔍 Fragment accessed for ${documentName}, length before update: ${fragmentLength}`,
+					)
+
+					// 应用从服务器/其他客户端来的更新
 					Y.applyUpdate(doc, update, SERVER_SYNC_ORIGIN)
-					
-					console.log(`✅ Applied batch update to subdoc ${documentName}, fragment length after update: ${fragment.length}`)
+
+					console.log(
+						`✅ Applied batch update to subdoc ${documentName}, fragment length after update: ${fragment.length}`,
+					)
 				} catch (error) {
-					console.error(`Caught error while handling a batch update for subdoc ${documentName}`, error)
+					console.error(
+						`Caught error while handling a batch update for subdoc ${documentName}`,
+						error,
+					)
 				}
-			} else {
-				console.warn(`⚠️ Subdoc ${documentName} not found in subDocMap or document.subdocs`)
-				console.warn(`   Available blockIds in subDocMap:`, Array.from(subDocMap.keys()))
-				console.warn(`   Available GUIDs in document.subdocs:`, Array.from(provider.document.subdocs).map(d => d.guid))
-			}
-		})
+			},
+		)
 
 		// Handle the updates (provider can implement custom logic)
 		if (provider.handleBatchUpdate) {
